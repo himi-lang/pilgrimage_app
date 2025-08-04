@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'map_screen.dart'; // さっき作ったファイルを読み込む
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
