@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "747768754958",
+    "project_id": "holy-land-pilgrimage-app",
+    "storage_bucket": "holy-land-pilgrimage-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747768754958:android:8ca987a0675b8c25bb5d5f",
+        "android_client_info": {
+          "package_name": "com.example.pilgrimage_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "747768754958-eui9p6qppg7560lqih3rv7l5s888mv3f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCormbCwqOMAP3semfM-AtfGwTO56edkxU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "747768754958-eui9p6qppg7560lqih3rv7l5s888mv3f.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pilgrimageApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
