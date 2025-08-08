@@ -1,39 +1,36 @@
+// firebase_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'models/location.dart';
 
 class FirebaseService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final _db = FirebaseFirestore.instance;
 
-  /// Firestore内のすべての「聖地」ドキュメントをまとめて取得
-  Future<List<LocationData>> fetchLocations() async {
-    try {
-      // サブコレクション名 "聖地" を collectionGroup で一発取得
-      final querySnapshot = await _db.collectionGroup('聖地').get();
-      print('◾️ Firestore collectionGroup取得件数: ${querySnapshot.docs.length}');
+  // 作品横断で「聖地」を全部ストリーム取得（追加/更新に即追従）
+  Stream<List<LocationData>> locationsStreamAllWorks() {
+    return _db
+        .collectionGroup('聖地')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) {
+                final data = d.data();
+                return LocationData.fromFirestore(d.reference.path, data);
+              }).toList(),
+        );
+  }
 
-      // ドキュメントごとに LocationData に変換
-      return querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        // 親ドキュメントID（アニメ作品タイトル）は 2階層上のID
-        final workTitle = doc.reference.parent.parent?.id ?? '不明な作品';
-        final location = LocationData(
-          id: doc.id,
-          name: data['name'] as String? ?? '',
-          address: data['address'] as String? ?? '',
-          description: data['description'] as String? ?? '',
-          image: data['image'] as String? ?? '',
-          latitude: (data['latitude'] as num?)?.toDouble() ?? 0.0,
-          longitude: (data['longitude'] as num?)?.toDouble() ?? 0.0,
-          workTitle: workTitle,
+  // 特定作品だけに絞る場合（例：「2.5次元の誘惑」）
+  Stream<List<LocationData>> locationsStreamByWork(String workTitle) {
+    return _db
+        .collection('聖地情報')
+        .doc(workTitle)
+        .collection('聖地')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs
+                  .map((d) => LocationData.fromFirestore(d.id, d.data()))
+                  .toList(),
         );
-        print(
-          ' ✅ Firestore→Model: ${location.name} @ ${location.latitude},${location.longitude} (${location.workTitle})',
-        );
-        return location;
-      }).toList();
-    } catch (e) {
-      print('🔥 Firestore取得エラー: $e');
-      return [];
-    }
   }
 }

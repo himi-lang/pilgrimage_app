@@ -1,1 +1,4 @@
 flutter/ephemeral
+# 鍵と env ファイルを除外
+/secrets/
+.env

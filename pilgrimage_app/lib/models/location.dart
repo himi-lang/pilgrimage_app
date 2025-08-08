@@ -1,3 +1,4 @@
+// location.dart
 class LocationData {
   final String id;
   final String name;
@@ -20,15 +21,21 @@ class LocationData {
   });
 
   factory LocationData.fromFirestore(String id, Map<String, dynamic> data) {
+    double _toDouble(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v) ?? 0.0;
+      return 0.0;
+    }
+
     return LocationData(
       id: id,
-      name: data['name'],
-      address: data['address'],
-      description: data['description'],
-      image: data['image'],
-      latitude: (data['latitude'] as num).toDouble(),
-      longitude: (data['longitude'] as num).toDouble(),
-      workTitle: data['workTitle'],
+      name: (data['name'] ?? '').toString(),
+      address: (data['address'] ?? '').toString(),
+      description: (data['description'] ?? '').toString(),
+      image: (data['image'] ?? '').toString(),
+      latitude: _toDouble(data['latitude']),
+      longitude: _toDouble(data['longitude']),
+      workTitle: (data['workTitle'] ?? '').toString(),
     );
   }
 }

@@ -1,4 +1,4 @@
-# Miscellaneous
+# ---- OS / 一般ゴミ ----
 *.class
 *.log
 *.pyc
@@ -12,35 +12,49 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# ---- IDE ----
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/            # 共有したくないなら有効化
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# ---- Flutter/Dart ----
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+**/doc/api/
+**/ios/Flutter/.last_build_id
 /build/
 
-# Symbolication related
-app.*.symbols
+# ---- iOS / CocoaPods ----
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/ephemeral/
+**/DerivedData/
 
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
+# ---- Android ----
+/android/.gradle/
+.gradle/                   # ルート直下の .gradle も無視
 /android/app/debug
 /android/app/profile
 /android/app/release
-/serviceAccountKey.json
+/android/local.properties  # ← ここに Maps など入れる
+key.properties
+*.jks
+*.keystore
+
+# ---- シークレット（必ず無視） ----
+/serviceAccountKey.json    # ルートのサービスアカウント鍵
+/secrets/                  # 鍵置き場を作るなら
+.env
+.env.*                     # 環境ごとの .env を使う場合
+
+# ---- その他 ----
+app.*.symbols
+app.*.map.json
