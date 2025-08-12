@@ -1,5 +1,6 @@
 // location.dart
 class LocationData {
+  //classで設計書を定義
   final String id;
   final String name;
   final String address;
@@ -10,6 +11,7 @@ class LocationData {
   final String workTitle;
 
   LocationData({
+    //LocationDataを使ってデータ挿入型を作る
     required this.id,
     required this.name,
     required this.address,

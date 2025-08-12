@@ -1,12 +1,15 @@
+// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_service.dart';
-import './models/location.dart'; // LocationData: id, name, address, description, image, latitude, longitude, workTitle
+import './models/location.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -14,10 +17,14 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // --- 検索 ---
   final TextEditingController _searchCtrl = TextEditingController();
-  bool _showCandidates = false; // 候補一覧の表示/非表示
+  bool _showCandidates = false;
+
+  // Enterでその時点の候補集合を固定
+  bool _pinsLocked = false;
+  Set<String> _lockedPinIds = {};
 
   // --- 地図 ---
   final Completer<GoogleMapController> _mapCtrl =
@@ -26,16 +33,56 @@ class _MapScreenState extends State<MapScreen> {
   bool _initialFitDone = false;
   LocationData? _selected;
 
-  // ★ ② Enter確定まで再購読を走らせないため、Streamは1回だけ生成して保持
+  // 現在地
+  LatLng? _userLatLng;
+  bool _triedStartFromUser = false;
+
+  // 中断/再開（復元用）
+  CameraPosition? _resumeCamera;
+  String? _resumeSelectedId;
+  bool _didRestoreSelected = false;
+
+  // カメラ追跡（保存用）
+  CameraPosition? _lastCamera;
+
+  // Firestore
   late final Stream<List<LocationData>> _locationsStream;
+  List<LocationData> _all = [];
+
+  // --- 端末保存キー ---
+  static const _kLat = 'resume_lat';
+  static const _kLng = 'resume_lng';
+  static const _kZoom = 'resume_zoom';
+  static const _kTilt = 'resume_tilt';
+  static const _kBearing = 'resume_bearing';
+  static const _kSearch = 'resume_search';
+  static const _kSelectedId = 'resume_selected_id';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _locationsStream = FirebaseService().locationsStreamAllWorks();
+    _loadResumeState(); // 先に読み出し（適用はMap作成後）
   }
 
-  // 初期カメラ位置：日本（海外スタート対策）
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _saveResumeState();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _saveResumeState();
+    }
+  }
+
+  // 初期カメラ（日本）
   static const CameraPosition _initialCamera = CameraPosition(
     target: LatLng(35.681236, 139.767125),
     zoom: 5.5,
@@ -43,17 +90,7 @@ class _MapScreenState extends State<MapScreen> {
     bearing: 0,
   );
 
-  // 日本の概形境界（※パン制限は解除済み）
-  static final LatLngBounds _japanBounds = LatLngBounds(
-    southwest: const LatLng(24.396308, 122.93457),
-    northeast: const LatLng(45.551483, 153.986672),
-  );
-
-  // ピンへ飛ぶときのズーム
   static const double _hitZoom = 16.0;
-
-  // 全スポット
-  List<LocationData> _all = [];
 
   // --- 文字正規化 + 検索 ---
   String _normalize(String s) {
@@ -63,11 +100,11 @@ class _MapScreenState extends State<MapScreen> {
         .runes
         .map((r) {
           if (r >= 0xFF01 && r <= 0xFF5E) return r - 0xFEE0; // 全角→半角
-          if (r >= 0x30A1 && r <= 0x30F6) return r - 0x60; // カタカナ→ひらがな
+          if (r >= 0x30A1 && r <= 0x30F6) return r - 0x60; // ｶﾅ→ひらがな
           return r;
         })
         .where((r) {
-          const drops = [0x0020, 0x3000, 0x3001, 0x3002]; // 空白・句読点除去
+          const drops = [0x0020, 0x3000, 0x3001, 0x3002];
           return !drops.contains(r);
         });
     return String.fromCharCodes(runes);
@@ -89,11 +126,8 @@ class _MapScreenState extends State<MapScreen> {
     return list.where((d) => _match(d, qs)).toList();
   }
 
-  // --- 地図操作ユーティリティ ---
-  Future<GoogleMapController> _controller() async {
-    final c = await _mapCtrl.future;
-    return c;
-  }
+  // --- 地図操作 ---
+  Future<GoogleMapController> _controller() async => _mapCtrl.future;
 
   Future<void> _goToLatLng(LatLng ll, {double zoom = _hitZoom}) async {
     final c = await _controller();
@@ -147,6 +181,131 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // === 現在地 ===
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<LatLng?> _getUserLatLng() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showSnack('端末の位置情報がOFFです');
+      return null;
+    }
+
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      _showSnack('位置情報の許可がありません');
+      return null;
+    }
+
+    try {
+      final p = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.best,
+        timeLimit: const Duration(seconds: 8),
+      );
+      return LatLng(p.latitude, p.longitude);
+    } on TimeoutException {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return LatLng(last.latitude, last.longitude);
+      return null;
+    } catch (_) {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return LatLng(last.latitude, last.longitude);
+      return null;
+    }
+  }
+
+  Future<void> _startFromUserOrFit() async {
+    if (_triedStartFromUser || !_mapReady) return;
+    _triedStartFromUser = true;
+
+    final loc = await _getUserLatLng();
+    if (!mounted) return;
+
+    if (loc != null) {
+      _userLatLng = loc;
+      _initialFitDone = true;
+      await _goToLatLng(loc, zoom: 15);
+      setState(() {});
+    } else {
+      await _fitToAllIfNeeded();
+    }
+  }
+
+  // === 中断/再開 ===
+  Future<void> _loadResumeState() async {
+    final p = await SharedPreferences.getInstance();
+    final lat = p.getDouble(_kLat);
+    final lng = p.getDouble(_kLng);
+    final zoom = p.getDouble(_kZoom);
+    final tilt = p.getDouble(_kTilt);
+    final bearing = p.getDouble(_kBearing);
+    final s = p.getString(_kSearch);
+    final sel = p.getString(_kSelectedId);
+
+    if (lat != null && lng != null && zoom != null) {
+      _resumeCamera = CameraPosition(
+        target: LatLng(lat, lng),
+        zoom: zoom,
+        tilt: tilt ?? 0,
+        bearing: bearing ?? 0,
+      );
+    }
+    if (s != null) {
+      _searchCtrl.text = s;
+      _showCandidates = s.trim().isNotEmpty;
+    }
+    if (sel != null && sel.isNotEmpty) {
+      _resumeSelectedId = sel;
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _saveResumeState() async {
+    final p = await SharedPreferences.getInstance();
+
+    final cam = _lastCamera;
+    if (cam != null) {
+      await p.setDouble(_kLat, cam.target.latitude);
+      await p.setDouble(_kLng, cam.target.longitude);
+      await p.setDouble(_kZoom, cam.zoom);
+      await p.setDouble(_kTilt, cam.tilt);
+      await p.setDouble(_kBearing, cam.bearing);
+    }
+    await p.setString(_kSearch, _searchCtrl.text);
+
+    if (_selected != null) {
+      await p.setString(_kSelectedId, _selected!.id);
+    } else {
+      await p.remove(_kSelectedId);
+    }
+  }
+
+  Future<void> _applyResumeOrStart() async {
+    if (!_mapReady) return;
+    final c = await _controller();
+
+    if (_resumeCamera != null) {
+      _initialFitDone = true; // 全体フィットを抑制
+      await c.moveCamera(CameraUpdate.newCameraPosition(_resumeCamera!));
+    } else {
+      await _startFromUserOrFit();
+    }
+  }
+
+  LocationData? _findById(String id) {
+    for (final d in _all) {
+      if (d.id == id) return d;
+    }
+    return null;
+  }
+
   // --- 候補パネル ---
   Widget _buildCandidatePanel(List<LocationData> items) {
     if (!_showCandidates || _searchCtrl.text.trim().isEmpty || items.isEmpty) {
@@ -197,6 +356,8 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _selected = d;
       _showCandidates = false;
+      _pinsLocked = true;
+      _lockedPinIds = {_selected!.id}; // タップ時はその1件に固定
     });
     FocusScope.of(context).unfocus();
 
@@ -210,7 +371,6 @@ class _MapScreenState extends State<MapScreen> {
     } catch (_) {}
   }
 
-  // --- 下部の選択カード + 経路 ---
   Widget _buildSelectedCard() {
     final d = _selected;
     if (d == null) return const SizedBox.shrink();
@@ -250,7 +410,11 @@ class _MapScreenState extends State<MapScreen> {
                           ),
                         ),
                         IconButton(
-                          onPressed: () => setState(() => _selected = null),
+                          onPressed:
+                              () => setState(() {
+                                _selected = null;
+                                // 固定は維持（ここで解除したいなら _pinsLocked=false; _lockedPinIds.clear();）
+                              }),
                           icon: const Icon(Icons.close),
                           tooltip: '閉じる',
                         ),
@@ -302,10 +466,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _openRoute(LocationData d) async {
-    final lat = d.latitude;
-    final lng = d.longitude;
     final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=walking',
+      'https://www.google.com/maps/dir/?api=1&destination=${d.latitude},${d.longitude}&travelmode=walking',
     );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -317,7 +479,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // --- AppBar ---
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       titleSpacing: 0,
@@ -337,6 +498,8 @@ class _MapScreenState extends State<MapScreen> {
                         _searchCtrl.clear();
                         setState(() {
                           _showCandidates = false;
+                          _pinsLocked = false;
+                          _lockedPinIds.clear();
                         });
                       },
                     ),
@@ -347,13 +510,11 @@ class _MapScreenState extends State<MapScreen> {
               borderSide: BorderSide.none,
             ),
           ),
-          // 入力中は候補パネルだけ出す（Firestoreには触らない）
-          onChanged: (v) {
-            setState(() {
-              _showCandidates = v.trim().isNotEmpty;
-            });
-          },
-          // Enterで確定→初めて地図移動
+          onChanged:
+              (v) => setState(() {
+                _showCandidates = v.trim().isNotEmpty;
+                _pinsLocked = false; // 入力し直したら固定解除
+              }),
           onSubmitted: (v) => _confirmSearch(v),
           textInputAction: TextInputAction.search,
         ),
@@ -361,9 +522,7 @@ class _MapScreenState extends State<MapScreen> {
       actions: [
         IconButton(
           tooltip: 'ログアウト',
-          onPressed: () async {
-            await FirebaseAuth.instance.signOut();
-          },
+          onPressed: () async => FirebaseAuth.instance.signOut(),
           icon: const Icon(Icons.logout),
         ),
       ],
@@ -371,20 +530,30 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _confirmSearch(String v) async {
-    final results = _filter(_all, v);
-    if (results.isEmpty) {
+    // 現在の候補（＝画面に出ている集合）を確定・固定
+    final candidates = _filter(_all, v).take(20).toList();
+    if (candidates.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('該当がありません')));
+      setState(() {
+        _pinsLocked = false;
+        _lockedPinIds.clear();
+        _showCandidates = false;
+      });
       return;
     }
-    final hit = results.first;
+
+    final hit = candidates.first;
     setState(() {
+      _pinsLocked = true;
+      _lockedPinIds = candidates.map((d) => d.id).toSet(); // ← この集合を保持
       _selected = hit;
       _showCandidates = false;
     });
     FocusScope.of(context).unfocus();
+
     await Future.delayed(const Duration(milliseconds: 40));
     await _goToLatLng(LatLng(hit.latitude, hit.longitude), zoom: _hitZoom);
     try {
@@ -394,14 +563,11 @@ class _MapScreenState extends State<MapScreen> {
     } catch (_) {}
   }
 
-  // --- ズームボタン（iOSでも表示） ---
   Widget _buildZoomButtons() {
-    // 紫いろのズームボタン（白い標準ズームは無効化済み）
     return SafeArea(
       child: Align(
         alignment: Alignment.bottomRight,
         child: Padding(
-          // ★ ① 右下へ配置（下の白いズームは消してある）
           padding: const EdgeInsets.only(right: 12, bottom: 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -436,10 +602,9 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF101214), // 白フラッシュ抑制（暗め）
+      backgroundColor: const Color(0xFF101214),
       appBar: _buildAppBar(),
       body: StreamBuilder<List<LocationData>>(
-        // ★ ② 入力のたびに新しいStreamを作らない
         stream: _locationsStream,
         builder: (context, snap) {
           final isFirstLoad =
@@ -459,27 +624,54 @@ class _MapScreenState extends State<MapScreen> {
           final data = snap.data ?? _all;
           _all = data;
 
-          final markers =
-              data.map((d) {
-                return Marker(
-                  markerId: MarkerId(d.id),
-                  position: LatLng(d.latitude, d.longitude),
-                  infoWindow: InfoWindow(
-                    title: d.name,
-                    snippet: [
-                      d.workTitle,
-                      d.address,
-                    ].where((e) => e.isNotEmpty).join(' / '),
-                    onTap: () => setState(() => _selected = d),
-                  ),
-                  onTap: () => setState(() => _selected = d),
-                );
-              }).toSet();
+          // 今の入力に対する候補（パネルと同じ20件）
+          final candidates = _filter(_all, _searchCtrl.text).take(20).toList();
 
-          // 初回読み込み後に全体フィット
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _fitToAllIfNeeded(),
-          );
+          // 表示するピン集合を決定
+          final List<LocationData> visible =
+              _pinsLocked
+                  ? _all.where((d) => _lockedPinIds.contains(d.id)).toList()
+                  : (_showCandidates && _searchCtrl.text.trim().isNotEmpty)
+                  ? candidates
+                  : _all;
+
+          final markers =
+              visible
+                  .map(
+                    (d) => Marker(
+                      markerId: MarkerId(d.id),
+                      position: LatLng(d.latitude, d.longitude),
+                      infoWindow: InfoWindow(
+                        title: d.name,
+                        snippet: [
+                          d.workTitle,
+                          d.address,
+                        ].where((e) => e.isNotEmpty).join(' / '),
+                        onTap: () => setState(() => _selected = d),
+                      ),
+                      onTap: () => setState(() => _selected = d),
+                    ),
+                  )
+                  .toSet();
+
+          // 1) 初回：復元 or 現在地/全体へ
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (_mapReady) {
+              await _applyResumeOrStart();
+            }
+            // 2) 復元で選択中スポットがあれば反映
+            if (!_didRestoreSelected && _resumeSelectedId != null) {
+              final d = _findById(_resumeSelectedId!);
+              _didRestoreSelected = true;
+              if (d != null) {
+                setState(() => _selected = d);
+                try {
+                  final c = await _controller();
+                  c.showMarkerInfoWindow(MarkerId(d.id));
+                } catch (_) {}
+              }
+            }
+          });
 
           return Stack(
             children: [
@@ -493,15 +685,12 @@ class _MapScreenState extends State<MapScreen> {
                     CameraUpdate.newCameraPosition(_initialCamera),
                   );
                   await Future.delayed(const Duration(milliseconds: 120));
-                  await _fitToAllIfNeeded();
+                  await _applyResumeOrStart();
                 },
-                // ★ ① パンは世界中OK
                 cameraTargetBounds: CameraTargetBounds.unbounded,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: true,
-                // ★ ① 下の白いズームは消す
                 zoomControlsEnabled: false,
-                // パン/回転/傾きは有効
                 zoomGesturesEnabled: true,
                 tiltGesturesEnabled: true,
                 rotateGesturesEnabled: true,
@@ -509,20 +698,14 @@ class _MapScreenState extends State<MapScreen> {
                 onTap: (_) {
                   if (_showCandidates) setState(() => _showCandidates = false);
                 },
+                onCameraMove: (pos) => _lastCamera = pos,
               ),
 
-              // 検索候補（地図の上に重ねる）
-              _buildCandidatePanel(
-                _filter(_all, _searchCtrl.text).take(20).toList(),
-              ),
-
-              // ズーム＋/−（紫）
+              // 候補パネルは candidates を表示
+              _buildCandidatePanel(candidates),
               _buildZoomButtons(),
-
-              // 下部の選択カード
               _buildSelectedCard(),
 
-              // Firestoreが本当に更新中のときだけ薄くオーバーレイ
               if (isUpdating)
                 Positioned.fill(
                   child: IgnorePointer(
