@@ -1,4 +1,4 @@
-// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート
+// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）+ ピン選択で画像プレビュー
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -232,7 +232,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _userLatLng = loc;
       _initialFitDone = true;
       await _goToLatLng(loc, zoom: 15);
-      setState(() {});
+      setState(() {}); // 青点の見た目更新
     } else {
       await _fitToAllIfNeeded();
     }
@@ -287,15 +287,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
+  // ★優先度：現在地 →（ダメ）全体フィット →（まだなら）復元カメラ
   Future<void> _applyResumeOrStart() async {
     if (!_mapReady) return;
-    final c = await _controller();
 
+    // 1) 現在地へ（できればこれで終わり）
+    await _startFromUserOrFit();
+    if (_initialFitDone) return;
+
+    // 2) 復元カメラへ（最後の保険）
+    final c = await _controller();
     if (_resumeCamera != null) {
-      _initialFitDone = true; // 全体フィットを抑制
+      _initialFitDone = true;
       await c.moveCamera(CameraUpdate.newCameraPosition(_resumeCamera!));
-    } else {
-      await _startFromUserOrFit();
     }
   }
 
@@ -371,6 +375,93 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  // =========================
+  // ピン選択時の画像プレビュー（追加）
+  // =========================
+  bool _isValidImageUrl(String? url) {
+    if (url == null) return false;
+    final u = url.trim();
+    if (u.isEmpty) return false;
+    final uri = Uri.tryParse(u);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
+  void _openImageViewer(String url, String title) {
+    showDialog(
+      context: context,
+      builder:
+          (_) => Dialog(
+            insetPadding: const EdgeInsets.all(12),
+            child: Stack(
+              children: [
+                InteractiveViewer(
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.network(
+                      url,
+                      fit: BoxFit.contain,
+                      errorBuilder:
+                          (_, __, ___) => const Center(
+                            child: Icon(Icons.broken_image_outlined, size: 48),
+                          ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                    tooltip: '閉じる',
+                  ),
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildSpotImage(LocationData d) {
+    final url = d.image.trim();
+    if (!_isValidImageUrl(url)) return const SizedBox.shrink();
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => _openImageViewer(url, d.name),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(color: Colors.black12),
+                  Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      );
+                    },
+                    errorBuilder: (context, error, stack) {
+                      return const Center(
+                        child: Icon(Icons.broken_image_outlined, size: 48),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSelectedCard() {
     final d = _selected;
     if (d == null) return const SizedBox.shrink();
@@ -413,7 +504,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           onPressed:
                               () => setState(() {
                                 _selected = null;
-                                // 固定は維持（ここで解除したいなら _pinsLocked=false; _lockedPinIds.clear();）
+                                // 固定は維持（必要なら解除の1行を有効化）
+                                // _pinsLocked=false; _lockedPinIds.clear();
                               }),
                           icon: const Icon(Icons.close),
                           tooltip: '閉じる',
@@ -434,6 +526,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ],
+
+                    // ★画像プレビューをここに差し込む（UI崩さず）
+                    _buildSpotImage(d),
+
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -654,7 +750,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   )
                   .toSet();
 
-          // 1) 初回：復元 or 現在地/全体へ
+          // 1) 初回：現在地→全体→復元 の順で適用
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (_mapReady) {
               await _applyResumeOrStart();
@@ -688,8 +784,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   await _applyResumeOrStart();
                 },
                 cameraTargetBounds: CameraTargetBounds.unbounded,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: true,
+                myLocationEnabled: true, // 青点オン
+                myLocationButtonEnabled: true, // 右上ボタンもオン
                 zoomControlsEnabled: false,
                 zoomGesturesEnabled: true,
                 tiltGesturesEnabled: true,

@@ -23,8 +23,6 @@ dependencies:
 
 flutter:
   uses-material-design: true
-  seents:
-    - pilgrimage_app\lib\image\IMG_3339.JPG
 
 firebase_core: ^2.27.0
 
