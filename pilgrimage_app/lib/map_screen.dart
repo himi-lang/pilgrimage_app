@@ -22,6 +22,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final TextEditingController _searchCtrl = TextEditingController();
   bool _showCandidates = false;
 
+  // 画像の下に説明文を（最大3行で）表示。空なら非表示。
+  Widget _buildSpotDescription(LocationData d) {
+    final desc = (d.description ?? '').trim();
+    if (desc.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        desc,
+        style: const TextStyle(fontSize: 13.5, height: 1.4),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
   // Enterでその時点の候補集合を固定
   bool _pinsLocked = false;
   Set<String> _lockedPinIds = {};
@@ -529,6 +544,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
                     // ★画像プレビューをここに差し込む（UI崩さず）
                     _buildSpotImage(d),
+
+                    //画像の下に説明文を追加
+                    _buildSpotDescription(d),
 
                     const SizedBox(height: 8),
                     Row(
