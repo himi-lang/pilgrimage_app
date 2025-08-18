@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_service.dart';
 import './models/location.dart';
+import 'widgets/app_ui.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});

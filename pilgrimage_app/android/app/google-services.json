@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "747768754958-5tln5b4uq85mdvkacdq0pj4g82lk0860.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pilgrimage_app",
+            "certificate_hash": "1d7cde668b3de3b77eb752352bb4a1dc8c6f77b6"
+          }
+        },
+        {
           "client_id": "747768754958-eui9p6qppg7560lqih3rv7l5s888mv3f.apps.googleusercontent.com",
           "client_type": 3
         }
