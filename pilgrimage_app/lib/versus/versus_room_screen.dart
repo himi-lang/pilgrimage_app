@@ -1,9 +1,10 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../widgets/app_ui.dart'; // 共通AppBar/Logout
+import '../widgets/app_ui.dart';
 import 'versus_service.dart';
 
 class VersusRoomScreen extends StatefulWidget {
@@ -17,15 +18,66 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
   final _svc = VersusService();
-  final _ansCtrl = TextEditingController();
 
   bool get isHost => _hostUid == _auth.currentUser?.uid;
   String? _hostUid;
 
-  @override
-  void dispose() {
-    _ansCtrl.dispose();
-    super.dispose();
+  Future<bool> _confirmLeaveRoom(BuildContext context) async {
+    final msg =
+        isHost ? 'ホストが離脱するとルームが終了する場合があります。退出しますか？' : '対戦を退出します。よろしいですか？';
+    final res = await showDialog<bool>(
+      context: context,
+      builder:
+          (c) => AlertDialog(
+            title: const Text('対戦から離脱'),
+            content: Text(msg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c, false),
+                child: const Text('キャンセル'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(c, true),
+                child: const Text('離脱する'),
+              ),
+            ],
+          ),
+    );
+    return res ?? false;
+  }
+
+  // 開始ボタンの処理（例外可視化・問題0件検知）
+  Future<void> _handleStart(Map<String, dynamic> data) async {
+    try {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('問題を読み込み中…')));
+
+      final qs = await _buildQuestions(
+        data['difficulty'] ?? 'normal',
+        count: 5,
+      );
+      if (qs.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('問題データが見つかりません（聖地情報コレクションを確認してください）')),
+        );
+        return;
+      }
+
+      await _svc.startMatch(widget.roomId, qs);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('対戦を開始しました')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('開始に失敗: $e')));
+    }
   }
 
   @override
@@ -39,79 +91,94 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final data = snap.data!.data()!;
-        _hostUid = data['hostUid'];
+        final data = snap.data!.data();
+        if (data == null) {
+          return const Scaffold(body: Center(child: Text('部屋が削除されました')));
+        }
+        _hostUid = data['hostUid'] as String?;
         final status = (data['status'] as String?) ?? 'waiting';
         final round = (data['round'] ?? 0) as int;
         final List qs = (data['questions'] ?? []) as List;
+        final int roundTimeSec = (data['roundTimeSec'] ?? 20) as int;
+        final String difficulty = (data['difficulty'] ?? 'normal') as String;
+        final DateTime? roundStartedAt =
+            (data['roundStartedAt'] as Timestamp?)?.toDate();
 
-        return Scaffold(
-          appBar: commonAppBar(
-            context,
-            title: '対戦ルーム',
-            actionsExtra: [
-              if ((data['code'] as String?)?.isNotEmpty == true)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Center(
-                    child: Text(
-                      '招待: ${data['code']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+        return WillPopScope(
+          onWillPop: () async {
+            final ok = await _confirmLeaveRoom(context);
+            if (ok) await _svc.leaveRoom(widget.roomId);
+            return ok;
+          },
+          child: Scaffold(
+            appBar: commonAppBar(
+              context,
+              title: '対戦ルーム',
+              currentMode: AppMode.versus,
+              actionsExtra: [
+                if ((data['code'] as String?)?.isNotEmpty == true)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Center(
+                      child: Text(
+                        '招待: ${data['code']}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
-            ],
-          ),
-          body: Column(
-            children: [
-              _PlayersList(roomId: widget.roomId),
-              const Divider(height: 1),
-              Expanded(
-                child: () {
-                  if (status == 'waiting') {
-                    return _WaitingPane(
-                      isHost: isHost,
-                      onStart: () async {
-                        final questions = await _buildQuestions(
-                          data['difficulty'] ?? 'normal',
-                          count: 5,
+              ],
+              modeConfirm: () => _confirmLeaveRoom(context),
+              modeBeforeNavigate: () => _svc.leaveRoom(widget.roomId),
+            ),
+            body: Column(
+              children: [
+                _PlayersList(roomId: widget.roomId),
+                const Divider(height: 1),
+                Expanded(
+                  child: () {
+                    if (status == 'waiting') {
+                      return _WaitingPane(
+                        isHost: isHost,
+                        onStart: () => _handleStart(data),
+                      );
+                    }
+                    if (status == 'finished' ||
+                        qs.isEmpty ||
+                        round < 0 ||
+                        round >= qs.length) {
+                      return _FinishedPane(roomId: widget.roomId);
+                    }
+                    return _PlayPane(
+                      question: Map<String, dynamic>.from(qs[round] as Map),
+                      round: round,
+                      total: qs.length,
+                      roundTimeSec: roundTimeSec,
+                      roundStartedAt: roundStartedAt,
+                      difficulty: difficulty,
+                      onSubmit: (ans, timeMs) async {
+                        final target = (qs[round]['workTitle'] ?? '') as String;
+                        final correct = _match(ans, target);
+                        await _svc.submitAnswer(
+                          roomId: widget.roomId,
+                          roundNo: round,
+                          answer: ans,
+                          timeMs: timeMs,
+                          correct: correct,
                         );
-                        await _svc.startMatch(widget.roomId, questions);
+                        if (isHost && round < qs.length - 1) {
+                          await _svc.nextRound(widget.roomId, round + 1);
+                        } else if (isHost && round == qs.length - 1) {
+                          await _db
+                              .collection('rooms')
+                              .doc(widget.roomId)
+                              .update({'status': 'finished'});
+                        }
                       },
                     );
-                  }
-                  if (status == 'finished' ||
-                      qs.isEmpty ||
-                      round < 0 ||
-                      round >= qs.length) {
-                    return _FinishedPane(roomId: widget.roomId);
-                  }
-                  return _PlayPane(
-                    question: Map<String, dynamic>.from(qs[round] as Map),
-                    round: round,
-                    total: qs.length,
-                    onSubmit: (ans, timeMs) async {
-                      final target = (qs[round]['workTitle'] ?? '') as String;
-                      final correct = _match(ans, target);
-                      await _svc.submitAnswer(
-                        roomId: widget.roomId,
-                        roundNo: round,
-                        answer: ans,
-                        timeMs: timeMs,
-                        correct: correct,
-                      );
-                      if (isHost && round < qs.length - 1) {
-                        await _svc.nextRound(widget.roomId, round + 1);
-                      } else if (isHost && round == qs.length - 1) {
-                        await _db.collection('rooms').doc(widget.roomId).update(
-                          {'status': 'finished'},
-                        );
-                      }
-                    },
-                  );
-                }(),
-              ),
-            ],
+                  }(),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -122,7 +189,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     String difficulty, {
     int count = 5,
   }) async {
-    // Firestoreの既存データから簡易抽出（MVP）
+    // 既存データから簡易抽出
     final worksSnap = await _db.collection('聖地情報').limit(5).get();
     final rand = Random();
     final out = <Map<String, dynamic>>[];
@@ -144,6 +211,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
           'name': m['name'] ?? '',
           'workTitle': m['workTitle'] ?? w.id,
           'image': m['image'] ?? '',
+          'address': (m['address'] ?? '').toString(),
           'latitude': _toDyn(m['latitude']),
           'longitude': _toDyn(m['longitude']),
         });
@@ -170,7 +238,7 @@ class _PlayersList extends StatelessWidget {
         .doc(roomId)
         .collection('players');
     return SizedBox(
-      height: 96,
+      height: 110, // はみ出し防止で拡張
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: ref.orderBy('joinedAt').snapshots(),
         builder: (c, s) {
@@ -207,9 +275,14 @@ class _PlayersList extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  Text(
-                    'Score ${d['score'] ?? 0}',
-                    style: const TextStyle(fontSize: 12),
+                  SizedBox(
+                    width: 96,
+                    child: Text(
+                      'Score ${d['score'] ?? 0}',
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ],
               );
@@ -282,11 +355,17 @@ class _PlayPane extends StatefulWidget {
   final Map<String, dynamic> question;
   final int round;
   final int total;
+  final int roundTimeSec;
+  final DateTime? roundStartedAt;
+  final String difficulty; // 'easy'|'normal'|'hard'
   final Future<void> Function(String ans, int timeMs) onSubmit;
   const _PlayPane({
     required this.question,
     required this.round,
     required this.total,
+    required this.roundTimeSec,
+    required this.roundStartedAt,
+    required this.difficulty,
     required this.onSubmit,
   });
   @override
@@ -296,12 +375,15 @@ class _PlayPane extends StatefulWidget {
 class _PlayPaneState extends State<_PlayPane> {
   final _ctrl = TextEditingController();
   late Stopwatch _sw;
-  bool _submitted = false; // 送信連打防止
+  bool _submitted = false;
+  late int _remain;
+  Timer? _ticker;
 
   @override
   void initState() {
     super.initState();
     _sw = Stopwatch()..start();
+    _setupTimer();
   }
 
   @override
@@ -312,13 +394,30 @@ class _PlayPaneState extends State<_PlayPane> {
       _ctrl.clear();
       _sw
         ..reset()
-        ..start(); // ラウンド切替時に計測と入力をリセット
+        ..start();
+      _setupTimer();
     }
+  }
+
+  void _setupTimer() {
+    _ticker?.cancel();
+    final start = widget.roundStartedAt ?? DateTime.now();
+    _remain = widget.roundTimeSec - DateTime.now().difference(start).inSeconds;
+    if (_remain < 0) _remain = 0;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _remain = (_remain - 1).clamp(0, widget.roundTimeSec));
+      if (_remain == 0) {
+        _ticker?.cancel();
+        if (!_submitted) _submit();
+      }
+    });
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _ticker?.cancel();
     super.dispose();
   }
 
@@ -327,6 +426,9 @@ class _PlayPaneState extends State<_PlayPane> {
     final q = widget.question;
     double _toD(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
     final pos = LatLng(_toD(q['latitude']), _toD(q['longitude']));
+    final hard = widget.difficulty == 'hard';
+    final halfPassed = _remain <= (widget.roundTimeSec ~/ 2);
+    final hint = (q['address'] as String?)?.trim();
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -337,6 +439,16 @@ class _PlayPaneState extends State<_PlayPane> {
             '第${widget.round + 1}問 / ${widget.total}',
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(value: _remain / widget.roundTimeSec),
+          Row(
+            children: [
+              Text('残り $_remain s'),
+              const Spacer(),
+              if (hard && halfPassed && (hint?.isNotEmpty ?? false))
+                Text('ヒント: $hint', overflow: TextOverflow.ellipsis),
+            ],
+          ),
           const SizedBox(height: 8),
           if ((q['image'] as String?)?.isNotEmpty == true)
             ClipRRect(
@@ -344,10 +456,11 @@ class _PlayPaneState extends State<_PlayPane> {
               child: Image.network(q['image'], height: 180, fit: BoxFit.cover),
             ),
           const SizedBox(height: 8),
-          Text(
-            'スポット: ${q['name'] ?? ''}',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+          if (!hard)
+            Text(
+              'スポット: ${q['name'] ?? ''}',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
           const SizedBox(height: 8),
           SizedBox(
             height: 160,
@@ -359,7 +472,7 @@ class _PlayPaneState extends State<_PlayPane> {
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
                 compassEnabled: false,
-                liteModeEnabled: true, // 軽量表示
+                liteModeEnabled: true,
               ),
             ),
           ),

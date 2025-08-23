@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart'; // 使っていなければ消してOK
-import 'versus_service.dart';
-
-// ▼ 適切な方を1本だけ残す（このファイルが lib/versus/ にあるなら下、直下なら上）
 import '../widgets/app_ui.dart';
-// import 'widgets/app_ui.dart';
+import 'versus_service.dart';
 
 class VersusLobbyScreen extends StatefulWidget {
   const VersusLobbyScreen({super.key});
@@ -16,7 +12,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   final s = VersusService();
   String difficulty = 'normal';
   final codeCtrl = TextEditingController();
-  bool busy = false; // 連打ガード
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -24,10 +20,71 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
     super.dispose();
   }
 
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _quickMatch() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await s.quickJoin(difficulty: difficulty);
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/versus/room/$id');
+    } catch (e) {
+      _toast('クイックマッチに失敗: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _createPrivate() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await s.createRoom(isPrivate: true, difficulty: difficulty);
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/versus/room/$id');
+    } catch (e) {
+      _toast('部屋の作成に失敗: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _joinByCode() async {
+    if (_busy) return;
+    final raw = codeCtrl.text.trim().toUpperCase();
+    if (raw.length != 6) {
+      _toast('招待コードは6桁です');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final id = await s.joinByCode(raw);
+      if (id == null) {
+        _toast('見つかりませんでした（コード・開始済み・終了の可能性）');
+      } else {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/versus/room/$id');
+      }
+    } catch (e) {
+      _toast('参加に失敗: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: commonAppBar(context, title: '対戦ロビー'), // ← 共通ログアウトつき
+      appBar: commonAppBar(
+        context,
+        title: '対戦ロビー',
+        currentMode: AppMode.versus,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -44,50 +101,18 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed:
-                  busy
-                      ? null
-                      : () async {
-                        setState(() => busy = true);
-                        final id = await s.quickJoin(difficulty: difficulty);
-                        if (!mounted) return;
-                        setState(() => busy = false);
-                        Navigator.pushReplacementNamed(
-                          context,
-                          '/versus/room/$id',
-                        );
-                      },
+              onPressed: _busy ? null : _quickMatch,
               icon: const Icon(Icons.flash_on),
-              label: Text(busy ? '接続中…' : 'クイックマッチ'),
+              label: Text(_busy ? '接続中…' : 'クイックマッチ'),
             ),
             const Divider(height: 32),
             Text('プライベートマッチ', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        busy
-                            ? null
-                            : () async {
-                              setState(() => busy = true);
-                              final id = await s.createRoom(
-                                isPrivate: true,
-                                difficulty: difficulty,
-                              );
-                              if (!mounted) return;
-                              setState(() => busy = false);
-                              Navigator.pushReplacementNamed(
-                                context,
-                                '/versus/room/$id',
-                              );
-                            },
-                    icon: const Icon(Icons.lock),
-                    label: const Text('部屋を作る'),
-                  ),
-                ),
-              ],
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _createPrivate,
+              icon: const Icon(Icons.lock),
+              label: const Text('部屋を作る'),
+              style: OutlinedButton.styleFrom(foregroundColor: cs.onSurface),
             ),
             const SizedBox(height: 12),
             Row(
@@ -96,43 +121,12 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
                   child: TextField(
                     controller: codeCtrl,
                     textCapitalization: TextCapitalization.characters,
-                    maxLength: 6,
-                    decoration: const InputDecoration(
-                      hintText: '招待コード6桁',
-                      counterText: '',
-                    ),
+                    decoration: const InputDecoration(hintText: '招待コード6桁'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed:
-                      busy
-                          ? null
-                          : () async {
-                            final code = codeCtrl.text.trim().toUpperCase();
-                            if (code.length != 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('6桁のコードを入力してください'),
-                                ),
-                              );
-                              return;
-                            }
-                            setState(() => busy = true);
-                            final id = await s.joinByCode(code);
-                            if (!mounted) return;
-                            setState(() => busy = false);
-                            if (id == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('見つかりませんでした')),
-                              );
-                            } else {
-                              Navigator.pushReplacementNamed(
-                                context,
-                                '/versus/room/$id',
-                              );
-                            }
-                          },
+                  onPressed: _busy ? null : _joinByCode,
                   child: const Text('参加'),
                 ),
               ],

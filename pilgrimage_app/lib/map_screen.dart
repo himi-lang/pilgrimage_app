@@ -633,7 +633,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           textInputAction: TextInputAction.search,
         ),
       ),
-      actions: const [LogoutButton()],
+      actions: const [
+        ModeSwitchButton(currentMode: AppMode.map),
+        LogoutButton(),
+      ],
     );
   }
 

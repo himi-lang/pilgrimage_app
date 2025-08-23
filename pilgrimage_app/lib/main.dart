@@ -15,6 +15,9 @@ import 'versus/versus_room_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  //デバッグ用
+  debugPrint('projectId = ${Firebase.app().options.projectId}');
   runApp(const MyApp());
 }
 
