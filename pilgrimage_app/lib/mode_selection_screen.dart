@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'widgets/app_ui.dart';
 
 class ModeSelectionScreen extends StatelessWidget {
   const ModeSelectionScreen({super.key});
@@ -42,10 +43,10 @@ class ModeSelectionScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('モード選択')),
+      appBar: commonAppBar(context, title: 'モード選択'),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: ListView(
           children: [
             card(
               icon: Icons.map,

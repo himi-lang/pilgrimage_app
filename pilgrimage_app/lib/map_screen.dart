@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -634,13 +633,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           textInputAction: TextInputAction.search,
         ),
       ),
-      actions: [
-        IconButton(
-          tooltip: 'ログアウト',
-          onPressed: () async => FirebaseAuth.instance.signOut(),
-          icon: const Icon(Icons.logout),
-        ),
-      ],
+      actions: const [LogoutButton()],
     );
   }
 
