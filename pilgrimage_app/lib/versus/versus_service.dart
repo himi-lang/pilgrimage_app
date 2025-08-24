@@ -1,4 +1,3 @@
-// lib/versus/versus_service.dart
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,147 +6,109 @@ class VersusService {
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
-  String get _uid => _auth.currentUser!.uid;
+  String? get uid => _auth.currentUser?.uid;
+  User? get user => _auth.currentUser;
 
-  // 6桁コード（公開ルーム用じゃないが、既存仕様を踏襲）
-  String _code6() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final r = Random.secure();
-    return List.generate(6, (_) => chars[r.nextInt(chars.length)]).join();
-  }
+  // ========= ロビー系 =========
 
-  // -------------------
-  // ルーム作成 / 参加系
-  // -------------------
-  Future<String> createRoom({
-    bool isPrivate = false,
-    String difficulty = 'normal',
-  }) async {
-    final uid = _auth.currentUser!.uid;
-    final ref = _db.collection('rooms').doc();
-    final code = isPrivate ? _code6() : '';
-    await ref.set({
-      'code': code,
-      'isPrivate': isPrivate,
-      'hostUid': uid,
-      'status': 'waiting',
-      'createdAt': FieldValue.serverTimestamp(),
-      'difficulty': difficulty, // ← easy/normal/hard
-      'round': 0,
-      'roundTimeSec': 20,
-      'questions': [],
-      'roundStartedAt': null,
-      'firstCorrect': null, // ← 追加：毎ラウンド最初の正解者情報
-    });
-    await ref.collection('players').doc(uid).set({
-      'displayName': _auth.currentUser!.displayName ?? 'Player',
-      'photoURL': _auth.currentUser!.photoURL,
-      'score': 0,
-      'streak': 0,
-      'joinedAt': FieldValue.serverTimestamp(),
-    });
-    return ref.id;
-  }
-
-  Future<String?> joinByCode(String code) async {
-    final q =
-        await _db
-            .collection('rooms')
-            .where('code', isEqualTo: code.trim().toUpperCase())
-            .where('status', isEqualTo: 'waiting')
-            .limit(1)
-            .get();
-    if (q.docs.isEmpty) return null;
-    final roomId = q.docs.first.id;
-    await _addSelf(roomId);
-    return roomId;
-  }
-
-  Future<String?> quickJoin({String difficulty = 'normal'}) async {
-    final q =
+  /// クイックマッチ。待機中の公開ルームに入る。無ければ作る。
+  Future<String> quickJoin({String difficulty = 'normal'}) async {
+    // 1. 待機中の公開ルームを探す
+    final qs =
         await _db
             .collection('rooms')
             .where('isPrivate', isEqualTo: false)
             .where('status', isEqualTo: 'waiting')
             .where('difficulty', isEqualTo: difficulty)
-            .orderBy('createdAt')
-            .limit(1)
+            .orderBy('createdAt', descending: false)
+            .limit(5)
             .get();
-    if (q.docs.isEmpty) {
-      return createRoom(isPrivate: false, difficulty: difficulty);
+
+    String roomId;
+    if (qs.docs.isEmpty) {
+      // 2. 無ければ作成
+      roomId = await _createRoomDoc(isPrivate: false, difficulty: difficulty);
+    } else {
+      roomId = qs.docs.first.id;
     }
-    final roomId = q.docs.first.id;
-    await _addSelf(roomId);
+    // 3. 入室
+    await _joinRoom(roomId);
     return roomId;
   }
 
-  Future<void> _addSelf(String roomId) async {
-    final uid = _auth.currentUser!.uid;
-    await _db
+  /// ルームを新規作成（プライベート/公開）
+  Future<String> createRoom({
+    required bool isPrivate,
+    String difficulty = 'normal',
+  }) async {
+    final id = await _createRoomDoc(
+      isPrivate: isPrivate,
+      difficulty: difficulty,
+    );
+    await _joinRoom(id);
+    return id;
+  }
+
+  /// 招待コードで入室（見つからなければ null）
+  Future<String?> joinByCode(String code) async {
+    final qs =
+        await _db
+            .collection('rooms')
+            .where('code', isEqualTo: code)
+            .where('status', isEqualTo: 'waiting')
+            .limit(1)
+            .get();
+    if (qs.docs.isEmpty) return null;
+    final id = qs.docs.first.id;
+    await _joinRoom(id);
+    return id;
+  }
+
+  Future<void> leaveRoom(String roomId) async {
+    final u = uid;
+    if (u == null) return;
+    final ref = _db
         .collection('rooms')
         .doc(roomId)
         .collection('players')
-        .doc(uid)
-        .set({
-          'displayName': _auth.currentUser!.displayName ?? 'Player',
-          'photoURL': _auth.currentUser!.photoURL,
-          'score': FieldValue.increment(0),
-          'streak': FieldValue.increment(0),
-          'joinedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        .doc(u);
+    await ref.delete();
   }
 
-  // -------------------
-  // ゲーム進行
-  // -------------------
+  // ========= 対戦進行 =========
 
-  /// 開始：ホストのみ。問題配列は毎回シャッフル（完全ランダム）
+  /// 対戦開始（questions セット、answers/retach クリア）
   Future<void> startMatch(
     String roomId,
     List<Map<String, dynamic>> questions,
   ) async {
-    final uid = _auth.currentUser!.uid;
-    final roomRef = _db.collection('rooms').doc(roomId);
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(roomRef);
-      final data = snap.data() ?? {};
-      if (data['hostUid'] != uid) {
-        throw StateError('host-only');
-      }
-
-      // 完全ランダム（配列順を毎回シャッフル）
-      final rnd = Random.secure();
-      final qs = List<Map<String, dynamic>>.from(questions)..shuffle(rnd);
-
-      tx.update(roomRef, {
-        'questions': qs,
-        'status': 'playing',
-        'round': 0,
-        'roundStartedAt': FieldValue.serverTimestamp(),
-        'firstCorrect': null, // ラウンド開始でクリア
-      });
+    final room = _db.collection('rooms').doc(roomId);
+    await _clearSubcollection(room.collection('answers'));
+    await _clearSubcollection(room.collection('rematch'));
+    await room.update({
+      'status': 'playing',
+      'round': 0,
+      'questions': questions,
+      'roundStartedAt': FieldValue.serverTimestamp(),
+      'finishedAt': FieldValue.delete(),
     });
   }
 
-  /// 次ラウンド：ホストのみ。開始時刻を更新し、firstCorrect をリセット
-  Future<void> nextRound(String roomId, int nextRound) async {
-    final uid = _auth.currentUser!.uid;
-    final roomRef = _db.collection('rooms').doc(roomId);
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(roomRef);
-      final data = snap.data() ?? {};
-      if (data['hostUid'] != uid) {
-        throw StateError('host-only');
-      }
-      tx.update(roomRef, {
-        'round': nextRound,
-        'roundStartedAt': FieldValue.serverTimestamp(),
-        'firstCorrect': null,
-      });
+  Future<void> nextRound(String roomId, int round) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'round': round,
+      'roundStartedAt': FieldValue.serverTimestamp(),
     });
   }
 
-  /// 回答送信（冪等化）：同ラウンドに自分の解答Docがあればスコア加算しない
+  Future<void> finishMatch(String roomId) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'status': 'finished',
+      'finishedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// 解答送信（スコア加算はプロジェクト側の実装に合わせてね）
   Future<void> submitAnswer({
     required String roomId,
     required int roundNo,
@@ -155,121 +116,134 @@ class VersusService {
     required int timeMs,
     required bool correct,
   }) async {
-    final uid = _auth.currentUser!.uid;
-    final roomRef = _db.collection('rooms').doc(roomId);
-    final playerRef = roomRef.collection('players').doc(uid);
-    final ansRef = roomRef
+    final u = uid ?? '';
+    await _db
+        .collection('rooms')
+        .doc(roomId)
         .collection('answers')
-        .doc('${roundNo}_${uid.substring(0, 8)}'); // ← 既存命名を維持
-
-    await _db.runTransaction((tx) async {
-      // 既回答チェック（同ラウンド重複を無効化）
-      final existed = await tx.get(ansRef);
-      if (existed.exists) return;
-
-      final roomSnap = await tx.get(roomRef);
-      final diff = (roomSnap.data()?['difficulty'] ?? 'normal') as String;
-      final mult = {'easy': 1.0, 'normal': 1.25, 'hard': 1.5}[diff] ?? 1.0;
-
-      final playerSnap = await tx.get(playerRef);
-      final curStreak = (playerSnap.data()?['streak'] ?? 0) as int;
-
-      tx.set(ansRef, {
-        'uid': uid,
-        'roundNo': roundNo,
-        'answer': answer,
-        'correct': correct,
-        'timeMs': timeMs,
-        'submittedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (correct) {
-        final speed = (1000 - (timeMs ~/ 50)).clamp(0, 500); // 0..500
-        final base = 300;
-        final bonus = curStreak * 50;
-        final inc = ((base + speed + bonus) * mult).round();
-        tx.update(playerRef, {
-          'score': FieldValue.increment(inc),
-          'streak': curStreak + 1,
-        });
-      } else {
-        tx.update(playerRef, {'streak': 0});
-      }
-    });
-  }
-
-  /// 誰かが最初に正解したらラウンドを確定して即次へ
-  /// （UI側で正解送信後に呼ぶ）
-  Future<void> tryFinishRoundOnFirstCorrect({
-    required String roomId,
-    required int roundNo,
-    required String correctAnswer,
-  }) async {
-    final roomRef = _db.collection('rooms').doc(roomId);
-
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(roomRef);
-      if (!snap.exists) return;
-      final data = snap.data() as Map<String, dynamic>;
-
-      final currentRound = (data['round'] ?? 0) as int;
-      if (currentRound != roundNo) return; // 既に進んでいる
-
-      final first = data['firstCorrect'] as Map<String, dynamic>?;
-      if (first != null && (first['round'] ?? -1) == roundNo) {
-        // すでに最初の正解が登録済み
-        return;
-      }
-
-      // 最初の正解者を確定し、答えを公開
-      tx.update(roomRef, {
-        'firstCorrect': {
+        .doc('$roundNo-$u')
+        .set({
           'round': roundNo,
-          'answer': correctAnswer,
-          'by': _uid,
-          'at': FieldValue.serverTimestamp(),
-        },
-      });
-
-      // 次のラウンドへ
-      tx.update(roomRef, {
-        'round': roundNo + 1,
-        'roundStartedAt': FieldValue.serverTimestamp(),
-        'firstCorrect': null, // 直後に UI が次を描画する前提で一応クリアしておくならコメントアウト
-      });
-    });
+          'uid': u,
+          'answer': answer,
+          'timeMs': timeMs,
+          'correct': correct,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
   }
 
-  /// 退出：最古参へホスト移譲 or 参加者0なら部屋削除（トランザクション）
-  Future<void> leaveRoom(String roomId) async {
-    final uid = _auth.currentUser!.uid;
-    final roomRef = _db.collection('rooms').doc(roomId);
-    final playerRef = roomRef.collection('players').doc(uid);
+  // ========= 再戦投票 =========
 
-    await _db.runTransaction((tx) async {
-      // 自分を消す
-      tx.delete(playerRef);
+  Future<void> voteRematch(String roomId) async {
+    final u = uid ?? '';
+    await _db.collection('rooms').doc(roomId).collection('rematch').doc(u).set({
+      'uid': u,
+      'ready': true,
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
 
-      final roomSnap = await tx.get(roomRef);
-      final hostUid = (roomSnap.data()?['hostUid'] as String?);
+  // ========= 互換API（旧ファイルが呼んでいてもビルドが通るように） =========
 
-      // 残存プレイヤーを1人取得（joinedAt 昇順）
-      final rest =
-          await roomRef
-              .collection('players')
-              .orderBy('joinedAt')
+  /// 旧画面が呼ぶことを想定：誰か正解 or 全員回答なら次ラウンド/終了に進める
+  Future<void> tryFinishRoundOnFirstCorrect(
+    String roomId, [
+    int? roundMaybe,
+    int? totalMaybe,
+  ]) async {
+    final room = _db.collection('rooms').doc(roomId);
+    final roomSnap = await room.get();
+    final data = roomSnap.data();
+    if (data == null) return;
+
+    final curRound = roundMaybe ?? (data['round'] ?? 0) as int;
+    final total = totalMaybe ?? ((data['questions'] ?? []) as List).length;
+
+    final players = await room.collection('players').get();
+    final answers =
+        await room
+            .collection('answers')
+            .where('round', isEqualTo: curRound)
+            .get();
+
+    final anyCorrect = answers.docs.any(
+      (d) => (d.data()['correct'] ?? false) == true,
+    );
+    final allAnswered =
+        players.docs.isNotEmpty && answers.docs.length >= players.docs.length;
+
+    if (anyCorrect || allAnswered) {
+      if (curRound < total - 1) {
+        await nextRound(roomId, curRound + 1);
+      } else {
+        await finishMatch(roomId);
+      }
+    }
+  }
+
+  // ========= 内部ユーティリティ =========
+
+  Future<void> _joinRoom(String roomId) async {
+    final u = user;
+    if (u == null) return;
+    final ref = _db.collection('rooms').doc(roomId);
+
+    await ref.set({
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    await ref.collection('players').doc(u.uid).set({
+      'uid': u.uid,
+      'displayName': u.displayName ?? 'Player',
+      'photoURL': u.photoURL,
+      'score': 0,
+      'joinedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<String> _createRoomDoc({
+    required bool isPrivate,
+    required String difficulty,
+  }) async {
+    final u = user!;
+    final doc = _db.collection('rooms').doc();
+    final code = isPrivate ? await _genUniqueCode() : null;
+
+    await doc.set({
+      'hostUid': u.uid,
+      'status': 'waiting',
+      'difficulty': difficulty,
+      'round': 0,
+      'roundTimeSec': 20,
+      'isPrivate': isPrivate,
+      'code': code,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return doc.id;
+    // 参加者追加は _joinRoom 側でやる
+  }
+
+  Future<String> _genUniqueCode() async {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O,1/Iを除外
+    final rnd = Random.secure();
+    while (true) {
+      final c =
+          List.generate(6, (_) => chars[rnd.nextInt(chars.length)]).join();
+      final hit =
+          await _db
+              .collection('rooms')
+              .where('code', isEqualTo: c)
               .limit(1)
               .get();
+      if (hit.docs.isEmpty) return c;
+    }
+  }
 
-      if (rest.docs.isEmpty) {
-        tx.delete(roomRef);
-        return;
-      }
-
-      // ホストが抜けたら移譲
-      if (hostUid == uid) {
-        tx.update(roomRef, {'hostUid': rest.docs.first.id});
-      }
-    });
+  Future<void> _clearSubcollection(CollectionReference col) async {
+    final snap = await col.get();
+    final batch = _db.batch();
+    for (final d in snap.docs) {
+      batch.delete(d.reference);
+    }
+    await batch.commit();
   }
 }
