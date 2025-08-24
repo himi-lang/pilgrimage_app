@@ -1,3 +1,4 @@
+// lib/versus/versus_service.dart
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,12 +7,18 @@ class VersusService {
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
+  String get _uid => _auth.currentUser!.uid;
+
+  // 6桁コード（公開ルーム用じゃないが、既存仕様を踏襲）
   String _code6() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final r = Random.secure();
     return List.generate(6, (_) => chars[r.nextInt(chars.length)]).join();
   }
 
+  // -------------------
+  // ルーム作成 / 参加系
+  // -------------------
   Future<String> createRoom({
     bool isPrivate = false,
     String difficulty = 'normal',
@@ -25,11 +32,12 @@ class VersusService {
       'hostUid': uid,
       'status': 'waiting',
       'createdAt': FieldValue.serverTimestamp(),
-      'difficulty': difficulty,
+      'difficulty': difficulty, // ← easy/normal/hard
       'round': 0,
       'roundTimeSec': 20,
       'questions': [],
       'roundStartedAt': null,
+      'firstCorrect': null, // ← 追加：毎ラウンド最初の正解者情報
     });
     await ref.collection('players').doc(uid).set({
       'displayName': _auth.currentUser!.displayName ?? 'Player',
@@ -89,7 +97,11 @@ class VersusService {
         }, SetOptions(merge: true));
   }
 
-  /// 開始：ホスト以外は明示的にエラーにする（UIで原因が出る）
+  // -------------------
+  // ゲーム進行
+  // -------------------
+
+  /// 開始：ホストのみ。問題配列は毎回シャッフル（完全ランダム）
   Future<void> startMatch(
     String roomId,
     List<Map<String, dynamic>> questions,
@@ -100,18 +112,24 @@ class VersusService {
       final snap = await tx.get(roomRef);
       final data = snap.data() ?? {};
       if (data['hostUid'] != uid) {
-        throw StateError('host-only'); // ルールで落ちる前に明示
+        throw StateError('host-only');
       }
+
+      // 完全ランダム（配列順を毎回シャッフル）
+      final rnd = Random.secure();
+      final qs = List<Map<String, dynamic>>.from(questions)..shuffle(rnd);
+
       tx.update(roomRef, {
-        'questions': questions,
+        'questions': qs,
         'status': 'playing',
         'round': 0,
         'roundStartedAt': FieldValue.serverTimestamp(),
+        'firstCorrect': null, // ラウンド開始でクリア
       });
     });
   }
 
-  /// 次ラウンド：ホストチェック＋開始時刻を更新
+  /// 次ラウンド：ホストのみ。開始時刻を更新し、firstCorrect をリセット
   Future<void> nextRound(String roomId, int nextRound) async {
     final uid = _auth.currentUser!.uid;
     final roomRef = _db.collection('rooms').doc(roomId);
@@ -124,11 +142,12 @@ class VersusService {
       tx.update(roomRef, {
         'round': nextRound,
         'roundStartedAt': FieldValue.serverTimestamp(),
+        'firstCorrect': null,
       });
     });
   }
 
-  /// 回答送信（冪等化）：answers が既にあればスコア加算しない
+  /// 回答送信（冪等化）：同ラウンドに自分の解答Docがあればスコア加算しない
   Future<void> submitAnswer({
     required String roomId,
     required int roundNo,
@@ -141,7 +160,7 @@ class VersusService {
     final playerRef = roomRef.collection('players').doc(uid);
     final ansRef = roomRef
         .collection('answers')
-        .doc('${roundNo}_${uid.substring(0, 8)}');
+        .doc('${roundNo}_${uid.substring(0, 8)}'); // ← 既存命名を維持
 
     await _db.runTransaction((tx) async {
       // 既回答チェック（同ラウンド重複を無効化）
@@ -179,38 +198,77 @@ class VersusService {
     });
   }
 
+  /// 誰かが最初に正解したらラウンドを確定して即次へ
+  /// （UI側で正解送信後に呼ぶ）
+  Future<void> tryFinishRoundOnFirstCorrect({
+    required String roomId,
+    required int roundNo,
+    required String correctAnswer,
+  }) async {
+    final roomRef = _db.collection('rooms').doc(roomId);
+
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(roomRef);
+      if (!snap.exists) return;
+      final data = snap.data() as Map<String, dynamic>;
+
+      final currentRound = (data['round'] ?? 0) as int;
+      if (currentRound != roundNo) return; // 既に進んでいる
+
+      final first = data['firstCorrect'] as Map<String, dynamic>?;
+      if (first != null && (first['round'] ?? -1) == roundNo) {
+        // すでに最初の正解が登録済み
+        return;
+      }
+
+      // 最初の正解者を確定し、答えを公開
+      tx.update(roomRef, {
+        'firstCorrect': {
+          'round': roundNo,
+          'answer': correctAnswer,
+          'by': _uid,
+          'at': FieldValue.serverTimestamp(),
+        },
+      });
+
+      // 次のラウンドへ
+      tx.update(roomRef, {
+        'round': roundNo + 1,
+        'roundStartedAt': FieldValue.serverTimestamp(),
+        'firstCorrect': null, // 直後に UI が次を描画する前提で一応クリアしておくならコメントアウト
+      });
+    });
+  }
+
   /// 退出：最古参へホスト移譲 or 参加者0なら部屋削除（トランザクション）
-  /// 退出：最古参へホスト移譲 or 0人なら削除（書き順とクエリ位置を安全化）
   Future<void> leaveRoom(String roomId) async {
     final uid = _auth.currentUser!.uid;
     final roomRef = _db.collection('rooms').doc(roomId);
     final playerRef = roomRef.collection('players').doc(uid);
 
-    // 1) まず自分を削除（単発書き込み。ここはトランザクション不要）
-    try {
-      await playerRef.delete();
-    } catch (_) {
-      // 既に消えていても続行
-    }
-
-    // 2) 残存プレイヤーを取得（トランザクション外のクエリでOK）
-    final restSnap =
-        await roomRef.collection('players').orderBy('joinedAt').limit(1).get();
-
-    // 3) 0人なら部屋削除
-    if (restSnap.docs.isEmpty) {
-      try {
-        await roomRef.delete();
-      } catch (_) {}
-      return;
-    }
-
-    // 4) ホストが自分だったら移譲（この更新だけ原子的に）
     await _db.runTransaction((tx) async {
-      final room = await tx.get(roomRef);
-      final hostUid = room.data()?['hostUid'] as String?;
+      // 自分を消す
+      tx.delete(playerRef);
+
+      final roomSnap = await tx.get(roomRef);
+      final hostUid = (roomSnap.data()?['hostUid'] as String?);
+
+      // 残存プレイヤーを1人取得（joinedAt 昇順）
+      final rest =
+          await roomRef
+              .collection('players')
+              .orderBy('joinedAt')
+              .limit(1)
+              .get();
+
+      if (rest.docs.isEmpty) {
+        tx.delete(roomRef);
+        return;
+      }
+
+      // ホストが抜けたら移譲
       if (hostUid == uid) {
-        tx.update(roomRef, {'hostUid': restSnap.docs.first.id});
+        tx.update(roomRef, {'hostUid': rest.docs.first.id});
       }
     });
   }
