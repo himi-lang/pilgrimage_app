@@ -1,4 +1,6 @@
 // map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）+ ピン選択で画像プレビュー
+// ＋軽量化（検索デバウンス／ズーム依存のマーカー間引き／1回だけのafter-buildフック／画像描画の軽量化）
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_service.dart';
 import './models/location.dart';
@@ -21,21 +24,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // --- 検索 ---
   final TextEditingController _searchCtrl = TextEditingController();
   bool _showCandidates = false;
+  Timer? _searchDebounce; // ★ 追記: 入力デバウンス
 
-  // 画像の下に説明文を（最大3行で）表示。空なら非表示。
-  Widget _buildSpotDescription(LocationData d) {
-    final desc = (d.description ?? '').trim();
-    if (desc.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Text(
-        desc,
-        style: const TextStyle(fontSize: 13.5, height: 1.4),
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
+  StreamSubscription? _debugSub;
 
   // Enterでその時点の候補集合を固定
   bool _pinsLocked = false;
@@ -64,6 +55,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   late final Stream<List<LocationData>> _locationsStream;
   List<LocationData> _all = [];
 
+  // after-buildを1回だけ走らせる
+  bool _onceAfterBuildRan = false; // ★ 追記
+
+  // ズーム整数バケットの差分でマーカー再計算
+  double _lastZoomBucket = -1000; // ★ 追記
+  int _markerRevision = 0; // ★ 追記（setStateのトリガ用）
+
   // --- 端末保存キー ---
   static const _kLat = 'resume_lat';
   static const _kLng = 'resume_lng';
@@ -79,6 +77,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _locationsStream = FirebaseService().locationsStreamAllWorks();
     _loadResumeState(); // 先に読み出し（適用はMap作成後）
+
+    _debugSub = FirebaseFirestore.instance
+        .collection('聖地情報')
+        .limit(1)
+        .snapshots()
+        .listen(
+          (s) => debugPrint(
+            '聖地情報RT: size=${s.size}, fromCache=${s.metadata.isFromCache}',
+          ),
+          onError: (e) => debugPrint('聖地情報RT error: $e'),
+        );
   }
 
   @override
@@ -86,6 +95,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _saveResumeState();
     _searchCtrl.dispose();
+    _debugSub?.cancel();
+    _searchDebounce?.cancel(); // ★ 追記
     super.dispose();
   }
 
@@ -415,6 +426,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     child: Image.network(
                       url,
                       fit: BoxFit.contain,
+                      filterQuality: FilterQuality.low, // ★ 軽量化
+                      cacheWidth: 1280, // ★ 軽量化
                       errorBuilder:
                           (_, __, ___) => const Center(
                             child: Icon(Icons.broken_image_outlined, size: 48),
@@ -456,6 +469,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   Image.network(
                     url,
                     fit: BoxFit.cover,
+                    filterQuality: FilterQuality.low, // ★ 軽量化
+                    cacheWidth: 1280, // ★ 軽量化
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
                       return const Center(
@@ -474,6 +489,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSpotDescription(LocationData d) {
+    final desc = (d.description ?? '').trim();
+    if (desc.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        desc,
+        style: const TextStyle(fontSize: 13.5, height: 1.4),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 
@@ -541,13 +570,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ],
-
-                    // ★画像プレビューをここに差し込む（UI崩さず）
                     _buildSpotImage(d),
-
-                    //画像の下に説明文を追加
                     _buildSpotDescription(d),
-
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -624,18 +648,31 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               borderSide: BorderSide.none,
             ),
           ),
-          onChanged:
-              (v) => setState(() {
-                _showCandidates = v.trim().isNotEmpty;
-                _pinsLocked = false; // 入力し直したら固定解除
-              }),
+          onChanged: (v) {
+            // ★ デバウンス
+            _searchDebounce?.cancel();
+            _showCandidates = v.trim().isNotEmpty;
+            _pinsLocked = false; // 入力し直したら固定解除
+            _searchDebounce = Timer(const Duration(milliseconds: 180), () {
+              if (mounted) setState(() {});
+            });
+          },
           onSubmitted: (v) => _confirmSearch(v),
           textInputAction: TextInputAction.search,
         ),
       ),
-      actions: const [
-        ModeSwitchButton(currentMode: AppMode.map),
-        LogoutButton(),
+      actions: [
+        IconButton(
+          tooltip: '再同期',
+          onPressed: () async {
+            await FirebaseFirestore.instance.disableNetwork();
+            await FirebaseFirestore.instance.enableNetwork();
+            _showSnack('Firestoreを再同期しました');
+          },
+          icon: const Icon(Icons.sync),
+        ),
+        const ModeSwitchButton(currentMode: AppMode.map),
+        const LogoutButton(),
       ],
     );
   }
@@ -709,6 +746,32 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     );
   }
 
+  // --- マーカー間引き（軽量化） ---
+  double _cellForZoom(double z) {
+    if (z >= 17) return 0.0008; // ~80m
+    if (z >= 15) return 0.0016; // ~160m
+    if (z >= 13) return 0.003; // ~300m
+    if (z >= 11) return 0.006; // ~600m
+    if (z >= 9) return 0.012; // ~1.2km
+    return 0.02; // ~2km
+  }
+
+  List<LocationData> _downsample(
+    List<LocationData> list,
+    double zoom, {
+    int max = 900,
+  }) {
+    final cell = _cellForZoom(zoom);
+    final map = <String, LocationData>{};
+    for (final d in list) {
+      final k =
+          '${(d.latitude / cell).round()}:${(d.longitude / cell).round()}';
+      map.putIfAbsent(k, () => d);
+      if (map.length >= max) break;
+    }
+    return map.values.toList(growable: false);
+  }
+
   // --- ビルド ---
   @override
   Widget build(BuildContext context) {
@@ -718,6 +781,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       body: StreamBuilder<List<LocationData>>(
         stream: _locationsStream,
         builder: (context, snap) {
+          if (snap.hasError) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _showSnack('データ取得エラー: ${snap.error}');
+            });
+          }
           final isFirstLoad =
               snap.connectionState == ConnectionState.waiting && _all.isEmpty;
           final isUpdating =
@@ -746,8 +814,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   ? candidates
                   : _all;
 
+          // ★ ズームに応じてマーカーを間引いてから描画
+          final currentZoom = _lastCamera?.zoom ?? 12.0;
+          final renderList = _downsample(visible, currentZoom, max: 900);
+
           final markers =
-              visible
+              renderList
                   .map(
                     (d) => Marker(
                       markerId: MarkerId(d.id),
@@ -765,24 +837,26 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   )
                   .toSet();
 
-          // 1) 初回：現在地→全体→復元 の順で適用
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (_mapReady) {
-              await _applyResumeOrStart();
-            }
-            // 2) 復元で選択中スポットがあれば反映
-            if (!_didRestoreSelected && _resumeSelectedId != null) {
-              final d = _findById(_resumeSelectedId!);
-              _didRestoreSelected = true;
-              if (d != null) {
-                setState(() => _selected = d);
-                try {
-                  final c = await _controller();
-                  c.showMarkerInfoWindow(MarkerId(d.id));
-                } catch (_) {}
+          // 1回だけ：現在地→全体→復元 の順で適用 & 復元選択
+          if (!_onceAfterBuildRan) {
+            _onceAfterBuildRan = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (_mapReady) {
+                await _applyResumeOrStart();
               }
-            }
-          });
+              if (!_didRestoreSelected && _resumeSelectedId != null) {
+                final d = _findById(_resumeSelectedId!);
+                _didRestoreSelected = true;
+                if (d != null) {
+                  setState(() => _selected = d);
+                  try {
+                    final c = await _controller();
+                    c.showMarkerInfoWindow(MarkerId(d.id));
+                  } catch (_) {}
+                }
+              }
+            });
+          }
 
           return Stack(
             children: [
@@ -810,6 +884,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   if (_showCandidates) setState(() => _showCandidates = false);
                 },
                 onCameraMove: (pos) => _lastCamera = pos,
+                // ★ ズーム整数が変わった時だけ、マーカーの再計算トリガ
+                onCameraIdle: () {
+                  final z = _lastCamera?.zoom ?? 12.0;
+                  final bucket = z.floorToDouble();
+                  if ((bucket - _lastZoomBucket).abs() >= 1) {
+                    _lastZoomBucket = bucket;
+                    if (mounted) setState(() => _markerRevision++);
+                  }
+                },
               ),
 
               // 候補パネルは candidates を表示
