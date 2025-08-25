@@ -58,3 +58,5 @@ key.properties
 # ---- その他 ----
 app.*.symbols
 app.*.map.json
+/flutter
+/.fvm
