@@ -13,7 +13,6 @@ class VersusService {
 
   /// クイックマッチ。待機中の公開ルームに入る。無ければ作る。
   Future<String> quickJoin({String difficulty = 'normal'}) async {
-    // 1. 待機中の公開ルームを探す
     final qs =
         await _db
             .collection('rooms')
@@ -26,12 +25,10 @@ class VersusService {
 
     String roomId;
     if (qs.docs.isEmpty) {
-      // 2. 無ければ作成
       roomId = await _createRoomDoc(isPrivate: false, difficulty: difficulty);
     } else {
       roomId = qs.docs.first.id;
     }
-    // 3. 入室
     await _joinRoom(roomId);
     return roomId;
   }
@@ -64,6 +61,7 @@ class VersusService {
     return id;
   }
 
+  /// ルームから退出
   Future<void> leaveRoom(String roomId) async {
     final u = uid;
     if (u == null) return;
@@ -77,7 +75,7 @@ class VersusService {
 
   // ========= 対戦進行 =========
 
-  /// 対戦開始（questions セット、answers/retach クリア）
+  /// 対戦開始（questions セット、answers / rematch をクリア）
   Future<void> startMatch(
     String roomId,
     List<Map<String, dynamic>> questions,
@@ -108,7 +106,11 @@ class VersusService {
     });
   }
 
-  /// 解答送信（スコア加算はプロジェクト側の実装に合わせてね）
+  /// 解答送信 +（正解なら）スコア加算
+  ///
+  /// - `answers/{round-uid}` に解答を保存
+  /// - すでに正解済みなら**二重加点しない**
+  /// - 加点は `players/{uid}.score` へ `FieldValue.increment(points)`
   Future<void> submitAnswer({
     required String roomId,
     required int roundNo,
@@ -117,19 +119,36 @@ class VersusService {
     required bool correct,
   }) async {
     final u = uid ?? '';
-    await _db
-        .collection('rooms')
-        .doc(roomId)
-        .collection('answers')
-        .doc('$roundNo-$u')
-        .set({
-          'round': roundNo,
-          'uid': u,
-          'answer': answer,
-          'timeMs': timeMs,
-          'correct': correct,
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+    final roomRef = _db.collection('rooms').doc(roomId);
+    final ansRef = roomRef.collection('answers').doc('$roundNo-$u'); // ラウンド一意
+    final playerRef = roomRef.collection('players').doc(u);
+
+    await _db.runTransaction((tx) async {
+      final roomSnap = await tx.get(roomRef);
+      final ansSnap = await tx.get(ansRef);
+
+      final alreadyCorrect =
+          ansSnap.exists
+              ? ((ansSnap.data()?['correct'] ?? false) == true)
+              : false;
+
+      // 解答の保存/更新
+      tx.set(ansRef, {
+        'round': roundNo,
+        'uid': u,
+        'answer': answer,
+        'timeMs': timeMs,
+        'correct': correct,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 正解 & 未加点ならスコア加算
+      if (correct && !alreadyCorrect) {
+        final roundTimeSec = (roomSnap.data()?['roundTimeSec'] ?? 20) as int;
+        final points = _calcScore(timeMs, roundTimeSec);
+        tx.update(playerRef, {'score': FieldValue.increment(points)});
+      }
+    });
   }
 
   // ========= 再戦投票 =========
@@ -143,9 +162,9 @@ class VersusService {
     }, SetOptions(merge: true));
   }
 
-  // ========= 互換API（旧ファイルが呼んでいてもビルドが通るように） =========
+  // ========= 互換API（古い画面が呼んでいても落ちないように） =========
 
-  /// 旧画面が呼ぶことを想定：誰か正解 or 全員回答なら次ラウンド/終了に進める
+  /// 旧API互換：誰か正解 or 全員回答なら次へ/終了へ
   Future<void> tryFinishRoundOnFirstCorrect(
     String roomId, [
     int? roundMaybe,
@@ -191,6 +210,7 @@ class VersusService {
     await ref.set({
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
     await ref.collection('players').doc(u.uid).set({
       'uid': u.uid,
       'displayName': u.displayName ?? 'Player',
@@ -219,11 +239,10 @@ class VersusService {
       'createdAt': FieldValue.serverTimestamp(),
     });
     return doc.id;
-    // 参加者追加は _joinRoom 側でやる
   }
 
   Future<String> _genUniqueCode() async {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O,1/Iを除外
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O,1/I除外
     final rnd = Random.secure();
     while (true) {
       final c =
@@ -245,5 +264,13 @@ class VersusService {
       batch.delete(d.reference);
     }
     await batch.commit();
+  }
+
+  /// 経過時間に応じたスコア（100〜1000）
+  int _calcScore(int timeMs, int roundTimeSec) {
+    final maxMs = max(1, roundTimeSec * 1000);
+    final remain = (maxMs - timeMs).clamp(0, maxMs);
+    final ratio = remain / maxMs; // 0.0〜1.0
+    return 100 + (900 * ratio).round();
   }
 }
