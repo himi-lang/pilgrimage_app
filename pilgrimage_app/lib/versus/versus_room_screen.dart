@@ -12,7 +12,7 @@ import 'versus_lobby_screen.dart';
 // ===== 設定 =====
 const bool _MUTE_SNACK = true; // 画面下ログを抑制（true推奨）
 const int _REVEAL_HOLD_MS = 3000; // 正解公開→次問題までの待機(ms)
-const int _REMATCH_WINDOW_SEC = 7; // リザルトでの再戦投票受付(秒)
+const int _REMATCH_WINDOW_SEC = 10; // リザルトでの再戦投票受付(秒)
 
 class VersusRoomScreen extends StatefulWidget {
   final String roomId;
@@ -711,6 +711,25 @@ class _PlayPane extends StatefulWidget {
 }
 
 class _PlayPaneState extends State<_PlayPane> {
+  // 全角/半角・空白・一部記号の差を吸収して比較するための正規化
+  String _canon(String s) {
+    var t = (s ?? '').trim();
+    // よくある表記揺れの吸収
+    t =
+        t
+            .replaceAll(RegExp(r'[ \t\r\n　]'), '') // 全角含む空白除去
+            .replaceAll('！', '!')
+            .replaceAll('？', '?')
+            .replaceAll('・', '') // 中黒は無視
+            .replaceAll('〜', '~')
+            .replaceAll('－', '-')
+            .replaceAll('—', '-')
+            .replaceAll('―', '-')
+            .replaceAll('‐', '-')
+            .toLowerCase();
+    return t;
+  }
+
   final _ctrl = TextEditingController();
   late Stopwatch _sw;
   bool _submitted = false;
@@ -831,28 +850,68 @@ class _PlayPaneState extends State<_PlayPane> {
   }
 
   void _prepareChoices() {
-    final correct = (widget.question['workTitle'] ?? '') as String;
+    final correctRaw = (widget.question['workTitle'] ?? '') as String;
+    final correct =
+        correctRaw.trim().isEmpty
+            ? (widget.question['name'] ?? '').toString()
+            : correctRaw.trim();
+    final canonCorrect = _canon(correct);
+
     final qid =
         (widget.question['id'] ?? '${widget.question['name']}') as String;
     final rnd = Random(qid.hashCode);
-    final set = <String>{correct};
-    final pool = widget.workPool.isNotEmpty ? widget.workPool : [correct];
 
-    while (set.length < 4 && pool.isNotEmpty) {
-      final cand = pool[rnd.nextInt(pool.length)];
-      if (cand != correct) set.add(cand);
+    // プールから重複（正規化ベース）と正解を除いた候補を作る
+    final seen = <String>{};
+    final pool = <String>[];
+    for (final w in widget.workPool) {
+      final c = _canon(w);
+      if (c.isEmpty || c == canonCorrect) continue;
+      if (seen.add(c)) pool.add(w);
     }
-    while (set.length < 4) set.add('（ダミー）${set.length}');
-    final list = set.toList()..shuffle(rnd);
+
+    // まずは [正解 + ダミー3] を作る
+    final distractors = <String>[];
+    if (pool.isNotEmpty) {
+      final shuffled = List<String>.from(pool)..shuffle(rnd);
+      for (final w in shuffled) {
+        if (_canon(w) != canonCorrect && !_canonListContains(distractors, w)) {
+          distractors.add(w);
+          if (distractors.length >= 3) break;
+        }
+      }
+    }
+    while (distractors.length < 3) {
+      distractors.add('（ダミー）${distractors.length + 1}');
+    }
+
+    final list = <String>[correct, ...distractors]..shuffle(rnd);
+
+    // 正解が見つからない場合は強制挿入（非常時保険）
+    var idx = list.indexWhere((e) => _canon(e) == canonCorrect);
+    if (idx < 0) {
+      final pos = rnd.nextInt(list.length);
+      list[pos] = correct; // どれかを正解で置き換える
+      idx = pos;
+    }
 
     setState(() {
       _choices
         ..clear()
         ..addAll(list);
-      _correctIndex = _choices.indexOf(correct);
+      _correctIndex = idx;
       _pickedIndex = null;
       _pause = false;
     });
+  }
+
+  // 同一作品名（正規化後）を含むかチェック
+  bool _canonListContains(List<String> xs, String v) {
+    final c = _canon(v);
+    for (final e in xs) {
+      if (_canon(e) == c) return true;
+    }
+    return false;
   }
 
   @override
