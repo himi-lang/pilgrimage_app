@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -8,8 +8,13 @@ class AuthService {
     try {
       if (!kIsWeb) {
         try {
-          await GoogleSignIn().signOut();
-        } catch (_) {}
+          final signIn = GoogleSignIn.instance;
+          // initialize 済みでも呼べる（複数回OK）
+          await signIn.initialize();
+          await signIn.signOut(); // v7のサインアウト
+        } catch (_) {
+          // Google連携なし等は無視
+        }
       }
       await FirebaseAuth.instance.signOut();
     } finally {

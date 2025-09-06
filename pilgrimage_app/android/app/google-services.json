@@ -14,11 +14,35 @@
       },
       "oauth_client": [
         {
+          "client_id": "747768754958-4vg7gnsu7kf75brk39utdi590do3juli.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pilgrimage_app",
+            "certificate_hash": "c70b6afbc37d722cea41439442f62d6c75a7c161"
+          }
+        },
+        {
           "client_id": "747768754958-5tln5b4uq85mdvkacdq0pj4g82lk0860.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.pilgrimage_app",
             "certificate_hash": "1d7cde668b3de3b77eb752352bb4a1dc8c6f77b6"
+          }
+        },
+        {
+          "client_id": "747768754958-jqh4g8eosp57799fmftibvh553u50igm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pilgrimage_app",
+            "certificate_hash": "be284b29c86b036a4943dd1acb144333a6c03c4c"
+          }
+        },
+        {
+          "client_id": "747768754958-q1v883nbr3i0qvhcatccj812lu96093a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pilgrimage_app",
+            "certificate_hash": "0b2240c57b6a4e74e8621a6ee382da47d3099060"
           }
         },
         {

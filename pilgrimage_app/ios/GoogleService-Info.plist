@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>747768754958-4vg7gnsu7kf75brk39utdi590do3juli.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>REDACTED_IOS_MAPS_KEY</string>
+	<key>GCM_SENDER_ID</key>
+	<string>747768754958</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.pilgrimageApp</string>
+	<key>PROJECT_ID</key>
+	<string>holy-land-pilgrimage-app</string>
+	<key>STORAGE_BUCKET</key>
+	<string>holy-land-pilgrimage-app.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:747768754958:ios:6dd20f8cbb61b017bb5d5f</string>
+</dict>
+</plist>
