@@ -1,2 +1,16 @@
 /pilgrimage_app/serviceAccountKey.json
 *serviceAccount*key*.json
+pilgrimage_app/ios/Runner/GoogleService-Info.plist
+pilgrimage_app/android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+pilgrimage_app/ios/Runner/GoogleService-Info.plist
+pilgrimage_app/android/app/google-services.json
+
+pilgrimage_app/build/
+pilgrimage_app/.dart_tool/
+pilgrimage_app/.gradle/
+
+pilgrimage_app/ios/Pods/
+
+flutter/
