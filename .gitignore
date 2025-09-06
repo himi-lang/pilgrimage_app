@@ -14,3 +14,11 @@ pilgrimage_app/.gradle/
 pilgrimage_app/ios/Pods/
 
 flutter/
+
+# --- secrets (do not commit) ---
+pilgrimage_app/ios/Runner/GoogleService-Info.plist
+pilgrimage_app/ios/GoogleService-Info.plist
+pilgrimage_app/android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+ios/GoogleService-Info.plist
+android/app/google-services.json
