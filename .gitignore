@@ -13,7 +13,7 @@ pilgrimage_app/.gradle/
 
 pilgrimage_app/ios/Pods/
 
-flutter/
+flutter
 
 # --- secrets (do not commit) ---
 pilgrimage_app/ios/Runner/GoogleService-Info.plist
@@ -25,3 +25,36 @@ android/app/google-services.json
 
 ios/Runner/GoogleService-Info.plist
 android/app/google-services.json
+
+# === Flutter / Android / iOS: build artifacts ===
+**/build/
+**/.dart_tool/
+**/.gradle/
+**/.generated/
+**/.idea/
+**/.vscode/
+**/*.iml
+**/.DS_Store
+
+# === Firebase / Google / 秘密ファイル（絶対コミットしない） ===
+**/GoogleService-Info.plist
+**/google-services.json
+**/serviceAccount*key*.json
+**/local.properties
+**/key.properties
+**/Secrets.xcconfig
+
+# Android keystore / signing
+**/*.keystore
+**/*.jks
+
+# Apple 証明書 / 秘密鍵（必要なら）
+**/*.p8
+**/*.p12
+**/*.pem
+**/*.der
+**/*.mobileprovision
+
+# optional: 環境変数ファイルを使う場合
+*.env
+*.env.*
