@@ -1,8 +1,20 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+// local.properties から MAPS_API_KEY を読む
+val localProps = Properties().apply {
+    val f = File(rootDir, "local.properties")
+    if (f.exists()) FileInputStream(f).use {load(it)}
+}
+val MAPS_API_KEY: String = localProps.getProperty("MAPS_API_KEY") ?: ""
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
+
 }
 
 android {
@@ -16,7 +28,6 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
         jvmTarget = "17"
     }
 
@@ -29,6 +40,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        manifestPlaceholders += mapOf(
+            "MAPS_API_KEY" to MAPS_API_KEY
+        )
     }
 
     buildTypes {

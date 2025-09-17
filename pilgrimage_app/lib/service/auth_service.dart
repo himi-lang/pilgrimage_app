@@ -8,10 +8,7 @@ class AuthService {
     try {
       if (!kIsWeb) {
         try {
-          final signIn = GoogleSignIn.instance;
-          // initialize 済みでも呼べる（複数回OK）
-          await signIn.initialize();
-          await signIn.signOut(); // v7のサインアウト
+          await GoogleSignIn().signOut(); // v7のサインアウト
         } catch (_) {
           // Google連携なし等は無視
         }

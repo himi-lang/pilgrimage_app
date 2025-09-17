@@ -72,16 +72,15 @@ class _LoginScreenState extends State<LoginScreen> {
         uc = await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
       } else {
         // google_sign_in v7 仕様：instance + initialize() + authenticate()
-        final signIn = GoogleSignIn.instance;
-        await signIn.initialize();
-        final account = await signIn.authenticate(); // 旧 signIn() 相当
+        // 旧 signIn() 相当
+        final googleUser = await GoogleSignIn().signIn();
 
-        if (account == null) {
+        if (googleUser == null) {
           _toast('キャンセルしました');
           return;
         }
 
-        final gAuth = await account.authentication; // idToken が得られる
+        final gAuth = await googleUser.authentication; // idToken が得られる
         final cred = GoogleAuthProvider.credential(idToken: gAuth.idToken);
         uc = await FirebaseAuth.instance.signInWithCredential(cred);
       }
@@ -120,7 +119,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       labelText: 'パスワード（6文字以上）',
                       suffixIcon: IconButton(
                         onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                        icon: Icon(
+                          _obscure ? Icons.visibility : Icons.visibility_off,
+                        ),
                       ),
                     ),
                   ),
@@ -144,10 +145,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: _busy ? null : () => setState(() => _isSignUp = !_isSignUp),
-                    child: Text(_isSignUp
-                        ? '既にアカウントをお持ちの方（ログインへ）'
-                        : 'アカウントをお持ちでない方（新規登録へ）'),
+                    onPressed:
+                        _busy
+                            ? null
+                            : () => setState(() => _isSignUp = !_isSignUp),
+                    child: Text(
+                      _isSignUp
+                          ? '既にアカウントをお持ちの方（ログインへ）'
+                          : 'アカウントをお持ちでない方（新規登録へ）',
+                    ),
                   ),
                   if (_busy) ...[
                     const SizedBox(height: 16),
