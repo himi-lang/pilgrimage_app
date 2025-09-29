@@ -58,3 +58,4 @@ android/app/google-services.json
 # optional: 環境変数ファイルを使う場合
 *.env
 *.env.*
+pilgrimage_app/ios/Runner/Secrets.xcconfig
