@@ -33,7 +33,7 @@ class MyApp extends StatelessWidget {
       title: '聖地巡礼マップ',
       theme: ThemeData(
         useMaterial3: false,
-        colorSchemeSeed: const Color.fromARGB(255, 39, 155, 165),
+        colorSchemeSeed: const Color.fromARGB(255, 79, 255, 249), //全体のカラーを変更
       ),
       home: const _AuthGate(),
       routes: {

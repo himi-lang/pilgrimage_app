@@ -642,10 +642,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       },
                     ),
             filled: true,
+            fillColor: Colors.white,
             isDense: true,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
+            ),
+            hintStyle: const TextStyle(color: Colors.black38),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
             ),
           ),
           onChanged: (v) {
