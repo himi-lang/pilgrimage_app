@@ -29,26 +29,29 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-  debugShowCheckedModeBanner: false,
-  title: '聖地巡礼マップ',
-  theme: ThemeData(useMaterial3: false, colorSchemeSeed: const Color.fromARGB(255, 39, 155, 165)),
-  home: const _AuthGate(),
-  routes: {
-    '/map': (_) => const MapScreen(),
-    '/versus/lobby': (_) => const VersusLobbyScreen(), // ← 本物へ
-  },
-  onGenerateRoute: (settings) {
-    final name = settings.name ?? '';
-    if (name.startsWith('/versus/room/')) {
-      final id = name.substring('/versus/room/'.length);
-      return MaterialPageRoute(
-        builder: (_) => VersusRoomScreen(roomId: id), // ← 本物へ
-        settings: settings,
-      );
-    }
-    return null;
-  },
-);
+      debugShowCheckedModeBanner: false,
+      title: '聖地巡礼マップ',
+      theme: ThemeData(
+        useMaterial3: false,
+        colorSchemeSeed: const Color.fromARGB(255, 39, 155, 165),
+      ),
+      home: const _AuthGate(),
+      routes: {
+        '/map': (_) => const MapScreen(),
+        '/versus/lobby': (_) => const VersusLobbyScreen(), // ← 本物へ
+      },
+      onGenerateRoute: (settings) {
+        final name = settings.name ?? '';
+        if (name.startsWith('/versus/room/')) {
+          final id = name.substring('/versus/room/'.length);
+          return MaterialPageRoute(
+            builder: (_) => VersusRoomScreen(roomId: id), // ← 本物へ
+            settings: settings,
+          );
+        }
+        return null;
+      },
+    );
   }
 }
 

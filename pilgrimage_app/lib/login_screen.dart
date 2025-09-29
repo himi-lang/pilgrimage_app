@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -65,30 +66,19 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleGoogle() async {
     setState(() => _busy = true);
     try {
-      UserCredential uc;
+      //一度だけ初期化
+      await GoogleSignIn.instance.initialize(); //clientIDなどは必要なときだけ指定する
 
-      if (kIsWeb) {
-        // Web は Firebase のポップアップでOK
-        uc = await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
-      } else {
-        // google_sign_in v7 仕様：instance + initialize() + authenticate()
-        // 旧 signIn() 相当
-        final googleUser = await GoogleSignIn().signIn();
-
-        if (googleUser == null) {
-          _toast('キャンセルしました');
-          return;
-        }
-
-        final gAuth = await googleUser.authentication; // idToken が得られる
-        final cred = GoogleAuthProvider.credential(idToken: gAuth.idToken);
-        uc = await FirebaseAuth.instance.signInWithCredential(cred);
-      }
-      if (uc.user != null) _toast('Googleでサインインしました');
+      final user = await GoogleSignIn.instance.authenticate(); //サインインUIを開始する。
+      final auth = await user.authentication; //v7なのでidTokenのみ
+      final credential = GoogleAuthProvider.credential(idToken: auth.idToken);
+      await FirebaseAuth.instance.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
-      _toast(e.message ?? 'Googleサインインに失敗しました');
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        _toast('キャンセルされました');
+        return;
+      }
+      rethrow;
     }
   }
 

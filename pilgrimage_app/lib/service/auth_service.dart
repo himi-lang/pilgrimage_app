@@ -8,7 +8,7 @@ class AuthService {
     try {
       if (!kIsWeb) {
         try {
-          await GoogleSignIn().signOut(); // v7のサインアウト
+          await GoogleSignIn.instance.signOut(); // v7のサインアウト
         } catch (_) {
           // Google連携なし等は無視
         }
