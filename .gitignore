@@ -59,3 +59,4 @@ android/app/google-services.json
 *.env
 *.env.*
 pilgrimage_app/ios/Runner/Secrets.xcconfig
+pilgrimage_app/ios/Runner/Secrets.xcconfig
