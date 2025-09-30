@@ -60,3 +60,4 @@ android/app/google-services.json
 *.env.*
 pilgrimage_app/ios/Runner/Secrets.xcconfig
 pilgrimage_app/ios/Runner/Secrets.xcconfig
+pilgrimage_app/android/build/
