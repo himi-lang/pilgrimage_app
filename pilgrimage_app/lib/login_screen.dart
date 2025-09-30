@@ -11,11 +11,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _email = TextEditingController();
+  final _email = TextEditingController(); //ログイン時に要求するもの
   final _pass = TextEditingController();
   final _name = TextEditingController();
 
-  bool _isSignUp = false;
+  bool _isSignUp = false; //サインインのフラグ
   bool _busy = false;
   bool _obscure = true;
 

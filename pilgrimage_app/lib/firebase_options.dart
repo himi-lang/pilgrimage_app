@@ -58,15 +58,14 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCormbCwqOMAP3semfM-AtfGwTO56edkxU',
+    apiKey: 'AIzaSyAw1St5Cpm_EBFJ22IDINZ2PK6rF1I_XKQ',
     appId: '1:747768754958:ios:6dd20f8cbb61b017bb5d5f',
     messagingSenderId: '747768754958',
     projectId: 'holy-land-pilgrimage-app',
     storageBucket: 'holy-land-pilgrimage-app.firebasestorage.app',
-    androidClientId:
-        '747768754958-4vg7gnsu7kf75brk39utdi590do3juli.apps.googleusercontent.com',
-    iosClientId:
-        '747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52.apps.googleusercontent.com',
+    androidClientId: '747768754958-4vg7gnsu7kf75brk39utdi590do3juli.apps.googleusercontent.com',
+    iosClientId: '747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52.apps.googleusercontent.com',
     iosBundleId: 'com.example.pilgrimageApp',
   );
+
 }
