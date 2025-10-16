@@ -1,6 +1,5 @@
 // map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）+ ピン選択で画像プレビュー
 // ＋軽量化（検索デバウンス／ズーム依存のマーカー間引き／1回だけのafter-buildフック／画像描画の軽量化）
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
