@@ -899,8 +899,11 @@ class _PlayPaneState extends State<_PlayPane> {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: GoogleMap(
+              key: ValueKey('round_map_${widget.round}'),
               initialCameraPosition: CameraPosition(target: pos, zoom: 14),
-              markers: {Marker(markerId: const MarkerId('m'), position: pos)},
+              markers: {
+                Marker(markerId: MarkerId('m_${widget.round}'), position: pos),
+              },
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               compassEnabled: false,
