@@ -26,11 +26,12 @@ dependencies:
   firebase_storage: ^13.0.4
   image_cropper: ^11.0.0
   flutter_launcher_icons: ^0.14.4
+  audioplayers: ^6.5.1
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "image_dir/app_icon.png"
+  image_path: "assets/image_dir/app_icon.png"
   remove_alpha_ios: true
 
 
@@ -38,6 +39,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - information/
-    - image_dir/
+    - assets/information/
+    - assets/image_dir/
+    - assets/music_dir/
 

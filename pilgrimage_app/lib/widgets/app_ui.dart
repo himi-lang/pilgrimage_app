@@ -142,37 +142,37 @@ void _openAppMenu(BuildContext outerContext) {
                 context,
                 title: '利用規約',
                 icon: Icons.description_outlined, //好きなアイコンを選択可能
-                assetPath: 'information/Terms_of_use.txt',
+                assetPath: 'assets/information/Terms_of_use.txt',
               ),
               _policyTile(
                 context,
                 title: 'プライバシーポリシー',
                 icon: Icons.privacy_tip_outlined,
-                assetPath: 'information/privacy_policy.txt',
+                assetPath: 'assets/information/privacy_policy.txt',
               ),
               _policyTile(
                 context,
                 title: '特定商取引法',
                 icon: Icons.article_outlined,
-                assetPath: 'information/Commercial_Transactions.txt',
+                assetPath: 'assets/information/Commercial_Transactions.txt',
               ),
               _policyTile(
                 context,
                 title: '著作権',
                 icon: Icons.copyright,
-                assetPath: 'information/Copyright.txt',
+                assetPath: 'assets/information/Copyright.txt',
               ),
               _policyTile(
                 context,
                 title: "お問い合わせ",
                 icon: Icons.mail,
-                assetPath: 'information/info.txt',
+                assetPath: 'assets/information/info.txt',
               ),
               _policyTile(
                 context,
                 title: "注意事項",
                 icon: Icons.note,
-                assetPath: 'information/note.txt',
+                assetPath: 'assets/information/note.txt',
               ),
 
               // バージョン情報

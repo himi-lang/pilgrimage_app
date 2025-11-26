@@ -6,7 +6,7 @@ import 'service/terms_service.dart'; // ★ 追加（パスはこのファイル
 class TermsScreen extends StatelessWidget {
   const TermsScreen({super.key});
 
-  static const _termsAssetPath = 'information/Terms_of_use_first.txt';
+  static const _termsAssetPath = 'assets/information/Terms_of_use_first.txt';
 
   @override
   Widget build(BuildContext context) {
