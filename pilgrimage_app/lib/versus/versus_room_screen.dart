@@ -12,7 +12,7 @@ import 'versus_lobby_screen.dart';
 // ===== 設定 =====
 const bool _MUTE_SNACK = true; // 画面下ログを抑制（true推奨）
 const int _REVEAL_HOLD_MS = 3000; // 正解公開→次問題までの待機(ms)
-const int _REMATCH_WINDOW_SEC = 7; // リザルトでの再戦投票受付(秒)
+const int _REMATCH_WINDOW_SEC = 10; // リザルトでの再戦投票受付(秒)
 
 class VersusRoomScreen extends StatefulWidget {
   final String roomId;

@@ -1,21 +1,23 @@
-import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'mode_selection_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _email = TextEditingController(); //ログイン時に要求するもの
+  final _email = TextEditingController();
   final _pass = TextEditingController();
   final _name = TextEditingController();
 
-  bool _isSignUp = false; //サインインのフラグ
+  bool _isSignUp = false;
   bool _busy = false;
   bool _obscure = true;
 
@@ -56,6 +58,11 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         _toast('ログインしました');
       }
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+      );
     } on FirebaseAuthException catch (e) {
       _toast(e.message ?? '認証エラーが発生しました');
     } finally {
@@ -63,22 +70,49 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Google ログイン（google_sign_in パッケージは使わず FirebaseAuth 経由にする）
   Future<void> _handleGoogle() async {
     setState(() => _busy = true);
-    try {
-      //一度だけ初期化
-      await GoogleSignIn.instance.initialize(); //clientIDなどは必要なときだけ指定する
 
-      final user = await GoogleSignIn.instance.authenticate(); //サインインUIを開始する。
-      final auth = await user.authentication; //v7なのでidTokenのみ
-      final credential = GoogleAuthProvider.credential(idToken: auth.idToken);
-      await FirebaseAuth.instance.signInWithCredential(credential);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled) {
-        _toast('キャンセルされました');
-        return;
+    try {
+      if (kIsWeb) {
+        // Web のときは Popup で認証
+        final provider = GoogleAuthProvider();
+        provider.setCustomParameters({'prompt': 'select_account'});
+        await FirebaseAuth.instance.signInWithPopup(provider);
+      } else {
+        // ---- モバイル(Android/iOS) ----
+        // v7 では initialize → authenticate の流れ
+        await GoogleSignIn.instance.initialize();
+
+        final googleUser = await GoogleSignIn.instance.authenticate();
+        if (googleUser == null) {
+          _toast('キャンセルされました');
+          return;
+        }
+
+        final googleAuth = await googleUser.authentication;
+
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.idToken,
+          idToken: googleAuth.idToken,
+        );
+
+        await FirebaseAuth.instance.signInWithCredential(credential);
       }
-      rethrow;
+
+      if (!mounted) return;
+
+      _toast('ログインしました');
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      _toast(e.message ?? 'Googleサインインでエラーが発生しました');
+    } catch (e) {
+      _toast('Googleサインインでエラーが発生しました: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

@@ -165,6 +165,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   Future<void> _fitToAllIfNeeded() async {
     if (_initialFitDone || !_mapReady || _all.isEmpty) return;
+    ;
     final c = await _controller();
     _initialFitDone = true;
 
@@ -667,17 +668,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ),
       ),
       actions: [
-        IconButton(
-          tooltip: '再同期',
-          onPressed: () async {
-            await FirebaseFirestore.instance.disableNetwork();
-            await FirebaseFirestore.instance.enableNetwork();
-            _showSnack('Firestoreを再同期しました');
-          },
-          icon: const Icon(Icons.sync),
-        ),
-        const ModeSwitchButton(currentMode: AppMode.map),
-        const LogoutButton(),
+        //IconButton(
+        //  tooltip: '再同期',
+        //  onPressed: () async {
+        //    await FirebaseFirestore.instance.disableNetwork();
+        //    await FirebaseFirestore.instance.enableNetwork();
+        //    _showSnack('Firestoreを再同期しました');
+        //  },
+        //  icon: const Icon(Icons.sync),
+        //),
+        //上はfirebaseの再同期ボタン
+        const ModeSwitchButton(currentMode: AppMode.map), //対戦モードとマップを行き来
+        const AppMenuButton(), //ハンバーガーメニューボタン
       ],
     );
   }
