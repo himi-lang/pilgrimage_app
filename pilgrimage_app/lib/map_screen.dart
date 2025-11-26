@@ -1,5 +1,6 @@
-// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）+ ピン選択で画像プレビュー
-// ＋軽量化（検索デバウンス／ズーム依存のマーカー間引き／1回だけのafter-buildフック／画像描画の軽量化）
+// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）
+// ＋ピン選択で画像プレビュー ＋ 画像検索モードから来たときはその作品だけピン表示
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,11 @@ import './models/location.dart';
 import 'widgets/app_ui.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  /// 画像検索モードから遷移してきたときに渡される作品タイトル
+  final String? initialWorkTitle;
+
+  const MapScreen({super.key, this.initialWorkTitle});
+
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
@@ -23,7 +28,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // --- 検索 ---
   final TextEditingController _searchCtrl = TextEditingController();
   bool _showCandidates = false;
-  Timer? _searchDebounce; // ★ 追記: 入力デバウンス
+  Timer? _searchDebounce;
 
   StreamSubscription? _debugSub;
 
@@ -55,11 +60,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   List<LocationData> _all = [];
 
   // after-buildを1回だけ走らせる
-  bool _onceAfterBuildRan = false; // ★ 追記
+  bool _onceAfterBuildRan = false;
 
   // ズーム整数バケットの差分でマーカー再計算
-  double _lastZoomBucket = -1000; // ★ 追記
-  int _markerRevision = 0; // ★ 追記（setStateのトリガ用）
+  double _lastZoomBucket = -1000;
+  int _markerRevision = 0;
+
+  // 画像検索モードから来た作品の pin 固定を適用済みかどうか
+  bool _initialWorkApplied = false;
 
   // --- 端末保存キー ---
   static const _kLat = 'resume_lat';
@@ -75,7 +83,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _locationsStream = FirebaseService().locationsStreamAllWorks();
-    _loadResumeState(); // 先に読み出し（適用はMap作成後）
+
+    final hasInitialWork =
+        widget.initialWorkTitle != null &&
+        widget.initialWorkTitle!.trim().isNotEmpty;
+
+    if (hasInitialWork) {
+      // 画像検索モードから来たとき：検索窓だけ先にセット
+      _searchCtrl.text = widget.initialWorkTitle!;
+      _showCandidates = false;
+      _pinsLocked = false;
+      _lockedPinIds.clear();
+    } else {
+      // 通常起動：前回状態を復元
+      _loadResumeState();
+    }
 
     _debugSub = FirebaseFirestore.instance
         .collection('聖地情報')
@@ -95,7 +117,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     _saveResumeState();
     _searchCtrl.dispose();
     _debugSub?.cancel();
-    _searchDebounce?.cancel(); // ★ 追記
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -165,7 +187,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   Future<void> _fitToAllIfNeeded() async {
     if (_initialFitDone || !_mapReady || _all.isEmpty) return;
-    ;
+
     final c = await _controller();
     _initialFitDone = true;
 
@@ -387,7 +409,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _selected = d;
       _showCandidates = false;
       _pinsLocked = true;
-      _lockedPinIds = {_selected!.id}; // タップ時はその1件に固定
+      _lockedPinIds = {_selected!.id};
     });
     FocusScope.of(context).unfocus();
 
@@ -402,7 +424,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   // =========================
-  // ピン選択時の画像プレビュー（追加）
+  // ピン選択時の画像プレビュー
   // =========================
   bool _isValidImageUrl(String? url) {
     if (url == null) return false;
@@ -426,8 +448,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     child: Image.network(
                       url,
                       fit: BoxFit.contain,
-                      filterQuality: FilterQuality.low, // ★ 軽量化
-                      cacheWidth: 1280, // ★ 軽量化
+                      filterQuality: FilterQuality.low,
+                      cacheWidth: 1280,
                       errorBuilder:
                           (_, __, ___) => const Center(
                             child: Icon(Icons.broken_image_outlined, size: 48),
@@ -469,8 +491,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   Image.network(
                     url,
                     fit: BoxFit.cover,
-                    filterQuality: FilterQuality.low, // ★ 軽量化
-                    cacheWidth: 1280, // ★ 軽量化
+                    filterQuality: FilterQuality.low,
+                    cacheWidth: 1280,
                     loadingBuilder: (context, child, progress) {
                       if (progress == null) return child;
                       return const Center(
@@ -548,8 +570,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           onPressed:
                               () => setState(() {
                                 _selected = null;
-                                // 固定は維持（必要なら解除の1行を有効化）
-                                // _pinsLocked=false; _lockedPinIds.clear();
                               }),
                           icon: const Icon(Icons.close),
                           tooltip: '閉じる',
@@ -617,6 +637,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
+  // --- AppBar（検索ボックス付き） ---
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       titleSpacing: 0,
@@ -655,7 +676,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             ),
           ),
           onChanged: (v) {
-            // ★ デバウンス
             _searchDebounce?.cancel();
             _showCandidates = v.trim().isNotEmpty;
             _pinsLocked = false; // 入力し直したら固定解除
@@ -667,25 +687,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           textInputAction: TextInputAction.search,
         ),
       ),
-      actions: [
-        //IconButton(
-        //  tooltip: '再同期',
-        //  onPressed: () async {
-        //    await FirebaseFirestore.instance.disableNetwork();
-        //    await FirebaseFirestore.instance.enableNetwork();
-        //    _showSnack('Firestoreを再同期しました');
-        //  },
-        //  icon: const Icon(Icons.sync),
-        //),
-        //上はfirebaseの再同期ボタン
-        const ModeSwitchButton(currentMode: AppMode.map), //対戦モードとマップを行き来
-        const AppMenuButton(), //ハンバーガーメニューボタン
+      actions: const [
+        ModeSwitchButton(currentMode: AppMode.map),
+        AppMenuButton(),
       ],
     );
   }
 
   Future<void> _confirmSearch(String v) async {
-    // 現在の候補（＝画面に出ている集合）を確定・固定
     final candidates = _filter(_all, v).take(20).toList();
     if (candidates.isEmpty) {
       if (!mounted) return;
@@ -703,7 +712,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final hit = candidates.first;
     setState(() {
       _pinsLocked = true;
-      _lockedPinIds = candidates.map((d) => d.id).toSet(); // ← この集合を保持
+      _lockedPinIds = candidates.map((d) => d.id).toSet();
       _selected = hit;
       _showCandidates = false;
     });
@@ -779,7 +788,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     return map.values.toList(growable: false);
   }
 
-  // --- ビルド ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -821,7 +829,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   ? candidates
                   : _all;
 
-          // ★ ズームに応じてマーカーを間引いてから描画
+          // ズームに応じてマーカーを間引いてから描画
           final currentZoom = _lastCamera?.zoom ?? 12.0;
           final renderList = _downsample(visible, currentZoom, max: 900);
 
@@ -844,22 +852,31 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   )
                   .toSet();
 
-          // 1回だけ：現在地→全体→復元 の順で適用 & 復元選択
+          // 1回だけ：現在地→全体→復元 or 画像検索モード専用の初期表示
           if (!_onceAfterBuildRan) {
             _onceAfterBuildRan = true;
             WidgetsBinding.instance.addPostFrameCallback((_) async {
-              if (_mapReady) {
-                await _applyResumeOrStart();
-              }
-              if (!_didRestoreSelected && _resumeSelectedId != null) {
-                final d = _findById(_resumeSelectedId!);
-                _didRestoreSelected = true;
-                if (d != null) {
-                  setState(() => _selected = d);
-                  try {
-                    final c = await _controller();
-                    c.showMarkerInfoWindow(MarkerId(d.id));
-                  } catch (_) {}
+              final hasInitialWork =
+                  widget.initialWorkTitle != null &&
+                  widget.initialWorkTitle!.trim().isNotEmpty;
+
+              if (hasInitialWork && !_initialWorkApplied) {
+                _initialWorkApplied = true;
+                await _confirmSearch(widget.initialWorkTitle!);
+              } else {
+                if (_mapReady) {
+                  await _applyResumeOrStart();
+                }
+                if (!_didRestoreSelected && _resumeSelectedId != null) {
+                  final d = _findById(_resumeSelectedId!);
+                  _didRestoreSelected = true;
+                  if (d != null) {
+                    setState(() => _selected = d);
+                    try {
+                      final c = await _controller();
+                      c.showMarkerInfoWindow(MarkerId(d.id));
+                    } catch (_) {}
+                  }
                 }
               }
             });
@@ -877,11 +894,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     CameraUpdate.newCameraPosition(_initialCamera),
                   );
                   await Future.delayed(const Duration(milliseconds: 120));
-                  await _applyResumeOrStart();
+                  // ここでの _applyResumeOrStart 呼び出しは
+                  // 上の after-build 側でまとめて行うので不要
                 },
                 cameraTargetBounds: CameraTargetBounds.unbounded,
-                myLocationEnabled: true, // 青点オン
-                myLocationButtonEnabled: true, // 右上ボタンもオン
+                myLocationEnabled: true,
+                myLocationButtonEnabled: true,
                 zoomControlsEnabled: false,
                 zoomGesturesEnabled: true,
                 tiltGesturesEnabled: true,
@@ -891,7 +909,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   if (_showCandidates) setState(() => _showCandidates = false);
                 },
                 onCameraMove: (pos) => _lastCamera = pos,
-                // ★ ズーム整数が変わった時だけ、マーカーの再計算トリガ
                 onCameraIdle: () {
                   final z = _lastCamera?.zoom ?? 12.0;
                   final bucket = z.floorToDouble();
