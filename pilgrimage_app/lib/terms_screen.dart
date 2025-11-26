@@ -1,6 +1,7 @@
 // lib/terms_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'service/terms_service.dart'; // ★ 追加（パスはこのファイルからの相対）
 
 class TermsScreen extends StatelessWidget {
   const TermsScreen({super.key});
@@ -12,11 +13,12 @@ class TermsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('利用規約'),
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: false, // 戻るボタンは出さない
       ),
       body: SafeArea(
         child: Column(
           children: [
+            // 規約本文
             Expanded(
               child: FutureBuilder<String>(
                 future: rootBundle.loadString(_termsAssetPath),
@@ -46,24 +48,34 @@ class TermsScreen extends StatelessWidget {
                 },
               ),
             ),
+
             const Divider(height: 0),
+
+            // ボタン行
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
+                  // 同意しない
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {
-                        Navigator.of(context).pop(false); // 同意しない
+                        // 呼び出し元に false を返して閉じる
+                        Navigator.of(context).pop(false);
                       },
                       child: const Text('同意しない'),
                     ),
                   ),
                   const SizedBox(width: 12),
+
+                  // 同意する
                   Expanded(
                     child: FilledButton(
-                      onPressed: () {
-                        Navigator.of(context).pop(true); // 同意する
+                      onPressed: () async {
+                        // フラグ保存
+                        await TermsService.acceptCurrentTerms();
+                        // 呼び出し元に true を返して閉じる
+                        Navigator.of(context).pop(true);
                       },
                       child: const Text('同意する'),
                     ),

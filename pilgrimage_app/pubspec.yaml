@@ -25,6 +25,13 @@ dependencies:
   image_picker: ^1.2.1
   firebase_storage: ^13.0.4
   image_cropper: ^11.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "image_dir/app_icon.png"
+  remove_alpha_ios: true
 
 
 flutter:

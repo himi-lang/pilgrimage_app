@@ -4,11 +4,30 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'login_screen.dart';
 import 'mode_selection_screen.dart';
+import 'terms_screen.dart'; // ★ 追加
+import 'service/terms_service.dart'; // ★ 追加
 
 class StartScreen extends StatelessWidget {
   const StartScreen({super.key});
 
   Future<void> _handleTap(BuildContext context) async {
+    // ① 今のバージョンの利用規約を出す必要があるかチェック
+    final needTerms = await TermsService.shouldShowTerms();
+
+    if (needTerms) {
+      // ② 必要なら利用規約画面を開いて、同意したかどうか(bool)を受け取る
+      final accepted =
+          await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const TermsScreen()),
+          ) ??
+          false;
+
+      // 「同意しない」の場合はここで終了（ログイン画面へは進ませない）
+      if (!accepted) return;
+      // ※ TermsScreen 側で TermsService.acceptCurrentTerms() を呼んでおく想定
+    }
+
+    // ③ ここまで来たら「規約OK」なので、いつものログイン判定に進む
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -34,7 +53,7 @@ class StartScreen extends StatelessWidget {
           children: [
             // 背景画像
             Image.asset(
-              'image_dir/test1.jpg', // ← あとで差し替えてOK
+              'image_dir/test1.jpg', // ← ここは好きな画像に差し替えてOK
               fit: BoxFit.cover,
             ),
             // うっすら暗くするレイヤー

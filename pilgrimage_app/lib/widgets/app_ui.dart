@@ -158,9 +158,21 @@ void _openAppMenu(BuildContext outerContext) {
               ),
               _policyTile(
                 context,
-                title: '著作権法',
+                title: '著作権',
                 icon: Icons.copyright,
                 assetPath: 'information/Copyright.txt',
+              ),
+              _policyTile(
+                context,
+                title: "お問い合わせ",
+                icon: Icons.mail,
+                assetPath: 'information/info.txt',
+              ),
+              _policyTile(
+                context,
+                title: "注意事項",
+                icon: Icons.note,
+                assetPath: 'information/note.txt',
               ),
 
               // バージョン情報
@@ -178,33 +190,32 @@ void _openAppMenu(BuildContext outerContext) {
               ),
 
               // ★ ここから追加分 ↓↓↓
-              ListTile(
-                leading: const Icon(Icons.copyright),
-                title: const Text('著作権'),
-                subtitle: const Text('コンテンツの権利者表記'),
-                onTap: () {
-                  _openInfoPage(
-                    outerContext,
-                    title: '著作権',
-                    body:
-                        '© 2025 pilgrimage_app\n'
-                        '画像・データ等の著作権表記はここに記載します。',
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.mail_outline),
-                title: const Text('お問い合わせ'),
-                subtitle: const Text('メールアドレスは後で追加します'),
-                onTap: () {
-                  _openInfoPage(
-                    outerContext,
-                    title: 'お問い合わせ',
-                    body: 'お問い合わせ用のメールアドレスを後で掲載します。',
-                  );
-                },
-              ),
-
+              //ListTile(
+              //  leading: const Icon(Icons.copyright),
+              //  title: const Text('著作権'),
+              //  subtitle: const Text('コンテンツの権利者表記'),
+              //  onTap: () {
+              //    _openInfoPage(
+              //      outerContext,
+              //      title: '著作権',
+              //      body:
+              //          '© 2025 pilgrimage_app\n'
+              //          '画像・データ等の著作権表記はここに記載します。',
+              //   );
+              //  },
+              //),
+              //ListTile(
+              //  leading: const Icon(Icons.mail_outline),
+              //  title: const Text('お問い合わせ'),
+              //  subtitle: const Text('メールアドレスは後で追加します'),
+              //  onTap: () {
+              //    _openInfoPage(
+              //      outerContext,
+              //      title: 'お問い合わせ',
+              //     body: 'お問い合わせ用のメールアドレスを後で掲載します。',
+              //    );
+              //  },
+              //),
               const SizedBox(height: 12),
             ],
           );
