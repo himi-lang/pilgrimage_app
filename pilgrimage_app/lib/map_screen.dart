@@ -831,7 +831,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
           // ズームに応じてマーカーを間引いてから描画
           final currentZoom = _lastCamera?.zoom ?? 12.0;
-          final renderList = _downsample(visible, currentZoom, max: 900);
+          final renderList =
+              visible; // もし動作が重いとき、ピンを間引く_downsample(visible, currentZoom, max: 900);
 
           final markers =
               renderList

@@ -5,7 +5,7 @@
     <application
         android:label="Anime Atlas"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/ic_launcher">
 
         <!-- Google Maps API Key 設定 -->
         <meta-data

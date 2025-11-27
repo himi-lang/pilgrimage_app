@@ -25,11 +25,11 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         title: '画像検索モード',
         currentMode: AppMode.map,
         actionsExtra: [
-          IconButton(
-            tooltip: _isGrid ? 'リスト表示' : 'グリッド表示',
-            icon: Icon(_isGrid ? Icons.view_agenda : Icons.grid_view),
-            onPressed: () => setState(() => _isGrid = !_isGrid),
-          ),
+          //IconButton(
+          //  tooltip: _isGrid ? 'リスト表示' : 'グリッド表示',
+          //  icon: Icon(_isGrid ? Icons.view_agenda : Icons.grid_view),
+          //  onPressed: () => setState(() => _isGrid = !_isGrid),
+          //),
         ],
       ),
       body: Column(
