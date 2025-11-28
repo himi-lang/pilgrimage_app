@@ -1,26 +1,26 @@
-// main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-import 'versus/versus_lobby_screen.dart';
-import 'versus/versus_room_screen.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'firebase_options.dart';
+import 'start_screen.dart';
 import 'login_screen.dart';
-import 'map_screen.dart';
 import 'mode_selection_screen.dart';
-import 'start_screen.dart'; // ★ 追加：タップしてスタート画面
+import 'map_screen.dart';
+import 'versus/versus_lobby_screen.dart';
+import 'versus/versus_room_screen.dart';
+import 'ads/interstitial_ad_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } on UnsupportedError {
-    await Firebase.initializeApp();
-  }
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // ★ AdMob/テスト広告の初期化
+  await MobileAds.instance.initialize();
+
+  await InterstitialAdManager.preload();
+
   runApp(const MyApp());
 }
 
@@ -37,10 +37,10 @@ class MyApp extends StatelessWidget {
         colorSchemeSeed: const Color.fromARGB(255, 62, 143, 255),
       ),
 
-      // ★ ここを _AuthGate から StartScreen に変更
+      // 最初の画面は今までどおり StartScreen
       home: const StartScreen(),
 
-      // ルート整理（必要に応じて追加）
+      // いままで使ってたルートたち
       routes: {
         '/login': (_) => const LoginScreen(),
         '/mode_selection': (_) => const ModeSelectionScreen(),
@@ -48,6 +48,7 @@ class MyApp extends StatelessWidget {
         '/versus/lobby': (_) => const VersusLobbyScreen(),
       },
 
+      // /versus/room/{roomId} だけ特別扱い
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
         if (name.startsWith('/versus/room/')) {

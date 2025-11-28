@@ -5,3 +5,4 @@ plugins {
     id("com.google.gms.google-services") apply false
 }
 // repositories 等は settings.gradle 側でOK
+

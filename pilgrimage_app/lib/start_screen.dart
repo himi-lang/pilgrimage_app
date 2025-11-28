@@ -37,7 +37,7 @@ class _StartScreenState extends State<StartScreen> {
     _isProcessing = true;
 
     // ① 効果音
-    _player.play(AssetSource('music_dir/tear_drop.mp3'));
+    _player.play(AssetSource('music_dir/tear_drop.mp3')); //音源
 
     // ② フェードアウト開始
     setState(() {

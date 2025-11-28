@@ -27,6 +27,7 @@ dependencies:
   image_cropper: ^11.0.0
   flutter_launcher_icons: ^0.14.4
   audioplayers: ^6.5.1
+  google_mobile_ads: ^6.0.0
 
 flutter_launcher_icons:
   android: true
@@ -44,4 +45,3 @@ flutter:
     - assets/information/
     - assets/image_dir/
     - assets/music_dir/
-

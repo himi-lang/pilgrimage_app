@@ -7,6 +7,10 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-8206576905882583~1213337875"/>
+
         <!-- Google Maps API Key 設定 -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"

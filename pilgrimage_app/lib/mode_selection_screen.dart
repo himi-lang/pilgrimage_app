@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'widgets/app_ui.dart';
 import 'map_screen.dart';
 import 'image_search_screen.dart';
+import 'widgets/bottom_banner_ad.dart';
+import 'ads/interstitial_ad_manager.dart';
 
 class ModeSelectionScreen extends StatelessWidget {
   const ModeSelectionScreen({super.key});
@@ -48,33 +50,51 @@ class ModeSelectionScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: commonAppBar(context, title: 'モード選択'),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: [
-            // ★ マップモード → 専用メニュー画面へ
-            card(
-              icon: Icons.map,
-              title: '聖地マップモード',
-              subtitle: '地図で巡礼・検索・お気に入り',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const MapModeMenuScreen()),
-                );
-              },
+      body: Column(
+        children: [
+          // 上側：今までのカードリスト
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                children: [
+                  // ★ マップモード → 専用メニュー画面へ
+                  card(
+                    icon: Icons.map,
+                    title: '聖地マップモード',
+                    subtitle: '地図で巡礼・検索・お気に入り',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MapModeMenuScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // 対戦モード（今まで通り）
+                  card(
+                    icon: Icons.sports_esports,
+                    title: '対戦モード',
+                    subtitle: '早押しクイズ：公開/プライベート',
+                    onTap: () {
+                      InterstitialAdManager.show(
+                        onFinished: () {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            '/versus/lobby',
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            // 対戦モード（今まで通り）
-            card(
-              icon: Icons.sports_esports,
-              title: '対戦モード',
-              subtitle: '早押しクイズ：公開/プライベート',
-              onTap:
-                  () =>
-                      Navigator.pushReplacementNamed(context, '/versus/lobby'),
-            ),
-          ],
-        ),
+          ),
+          // 下側：バナー広告
+          const BottomBannerAd(),
+        ],
       ),
     );
   }
@@ -127,35 +147,44 @@ class MapModeMenuScreen extends StatelessWidget {
     return Scaffold(
       // 上の「モード選択へ」ボタンは commonAppBar の ModeSwitchButton がやってくれる
       appBar: commonAppBar(context, title: 'マップモード', currentMode: AppMode.map),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: ListView(
-          children: [
-            // ① これまで通りの地図画面
-            card(
-              icon: Icons.map_outlined,
-              title: 'マップ検索モード',
-              subtitle: '地図を見ながらスポットを探す',
-              onTap: () {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
-              },
+      body: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                children: [
+                  // ① これまで通りの地図画面
+                  card(
+                    icon: Icons.map_outlined,
+                    title: 'マップ検索モード',
+                    subtitle: '地図を見ながらスポットを探す',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const MapScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // ② 作品ごとの画像から選ぶ画面
+                  card(
+                    icon: Icons.image_search,
+                    title: '画像検索モード',
+                    subtitle: '作品画像から聖地を選ぶ',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ImageSearchScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            // ② 作品ごとの画像から選ぶ画面
-            card(
-              icon: Icons.image_search,
-              title: '画像検索モード',
-              subtitle: '作品画像から聖地を選ぶ',
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ImageSearchScreen()),
-                );
-              },
-            ),
-          ],
-        ),
+          ),
+          const BottomBannerAd(),
+        ],
       ),
     );
   }
