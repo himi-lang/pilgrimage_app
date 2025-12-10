@@ -34,7 +34,7 @@ class MyApp extends StatelessWidget {
       title: 'Anime Atlas',
       theme: ThemeData(
         useMaterial3: false,
-        colorSchemeSeed: const Color.fromARGB(255, 62, 143, 255),
+        colorSchemeSeed: const Color.fromRGBO(2, 109, 163, 1),
       ),
 
       // 最初の画面は今までどおり StartScreen

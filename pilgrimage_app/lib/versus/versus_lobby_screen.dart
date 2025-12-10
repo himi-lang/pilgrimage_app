@@ -77,61 +77,74 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: commonAppBar(
         context,
         title: '対戦ロビー',
         currentMode: AppMode.versus,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'easy', label: Text('Easy')),
-                ButtonSegment(value: 'normal', label: Text('Normal')),
-                ButtonSegment(value: 'hard', label: Text('Hard')),
-              ],
-              selected: {difficulty},
-              onSelectionChanged: (v) => setState(() => difficulty = v.first),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _busy ? null : _quickMatch,
-              icon: const Icon(Icons.flash_on),
-              label: Text(_busy ? '接続中…' : 'クイックマッチ'),
-            ),
-            const Divider(height: 32),
-            Text('プライベートマッチ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _createPrivate,
-              icon: const Icon(Icons.lock),
-              label: const Text('部屋を作る'),
-              style: OutlinedButton.styleFrom(foregroundColor: cs.onSurface),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: codeCtrl,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(hintText: '招待コード6桁'),
+      body: Container(
+        // ★ 背景画像
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/image_dir/tokyo_tower.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        // 背景の上にうっすら白をかぶせて内容を載せる
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white.withOpacity(0.85), // 0.7〜0.9くらいで好み調整
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'easy', label: Text('Easy')),
+                  //ButtonSegment(value: 'normal', label: Text('Normal')),
+                  //ButtonSegment(value: 'hard', label: Text('Hard')),
+                ],
+                selected: {difficulty},
+                onSelectionChanged: (v) => setState(() => difficulty = v.first),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _busy ? null : _quickMatch,
+                icon: const Icon(Icons.flash_on),
+                label: Text(_busy ? '接続中…' : 'クイックマッチ'),
+              ),
+              const Divider(height: 32),
+              Text('プライベートマッチ', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _createPrivate,
+                icon: const Icon(Icons.lock),
+                label: const Text('部屋を作る'),
+                style: OutlinedButton.styleFrom(foregroundColor: cs.onSurface),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: codeCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(hintText: '招待コード6桁'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _busy ? null : _joinByCode,
-                  child: const Text('参加'),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: _busy ? null : _joinByCode,
+                    child: const Text('参加'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

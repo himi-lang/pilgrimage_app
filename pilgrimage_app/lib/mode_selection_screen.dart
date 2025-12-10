@@ -49,20 +49,19 @@ class ModeSelectionScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: commonAppBar(context, title: 'モード選択'),
+      appBar: commonAppBar(context, title: 'Anime Atlas'),
       body: Column(
         children: [
-          // 上側：今までのカードリスト
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: ListView(
                 children: [
-                  // ★ マップモード → 専用メニュー画面へ
+                  // ★ 聖地マップモード → マップ用サブメニュー
                   card(
                     icon: Icons.map,
                     title: '聖地マップモード',
-                    subtitle: '地図で巡礼・検索・お気に入り',
+                    subtitle: '地図で探す・作品から探す',
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -72,19 +71,16 @@ class ModeSelectionScreen extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 16),
-                  // 対戦モード（今まで通り）
+                  // ★ 対戦モード → 対戦モード用サブメニュー
                   card(
                     icon: Icons.sports_esports,
                     title: '対戦モード',
-                    subtitle: '早押しクイズ：公開/プライベート',
+                    subtitle: '早押しクイズ：みんなと / プライベート',
                     onTap: () {
-                      InterstitialAdManager.show(
-                        onFinished: () {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            '/versus/lobby',
-                          );
-                        },
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const VersusModeMenuScreen(),
+                        ),
                       );
                     },
                   ),
@@ -92,7 +88,6 @@ class ModeSelectionScreen extends StatelessWidget {
               ),
             ),
           ),
-          // 下側：バナー広告
           const BottomBannerAd(),
         ],
       ),
@@ -101,7 +96,6 @@ class ModeSelectionScreen extends StatelessWidget {
 }
 
 /// マップモード内のサブメニュー
-/// 「マップ検索モード」「画像検索モード」を選ぶ画面
 class MapModeMenuScreen extends StatelessWidget {
   const MapModeMenuScreen({super.key});
 
@@ -145,8 +139,11 @@ class MapModeMenuScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      // 上の「モード選択へ」ボタンは commonAppBar の ModeSwitchButton がやってくれる
-      appBar: commonAppBar(context, title: 'マップモード', currentMode: AppMode.map),
+      appBar: commonAppBar(
+        context,
+        title: '聖地マップモード',
+        currentMode: AppMode.map,
+      ),
       body: Column(
         children: [
           Expanded(
@@ -154,11 +151,10 @@ class MapModeMenuScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: ListView(
                 children: [
-                  // ① これまで通りの地図画面
                   card(
                     icon: Icons.map_outlined,
-                    title: 'マップ検索モード',
-                    subtitle: '地図を見ながらスポットを探す',
+                    title: '地図から探す',
+                    subtitle: '地図からスポットを発見・検索',
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const MapScreen()),
@@ -166,16 +162,118 @@ class MapModeMenuScreen extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 16),
-                  // ② 作品ごとの画像から選ぶ画面
                   card(
                     icon: Icons.image_search,
-                    title: '画像検索モード',
-                    subtitle: '作品画像から聖地を選ぶ',
+                    title: '作品から探す',
+                    subtitle: 'アニメ作品を検索・タップ',
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const ImageSearchScreen(),
                         ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const BottomBannerAd(),
+        ],
+      ),
+    );
+  }
+}
+
+/// 対戦モード内のサブメニュー
+/// ボタン1: プライベート対戦
+/// ボタン2: みんなと対戦
+class VersusModeMenuScreen extends StatelessWidget {
+  const VersusModeMenuScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget card({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+    }) {
+      return InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: cs.surfaceContainer,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 40),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(subtitle),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: commonAppBar(
+        context,
+        title: '対戦モード',
+        // AppMode に versus があれば渡してもOK
+        // currentMode: AppMode.versus,
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: ListView(
+                children: [
+                  // ボタン1：プライベート対戦
+                  card(
+                    icon: Icons.lock,
+                    title: 'プライベート対戦',
+                    subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
+                    onTap: () {
+                      InterstitialAdManager.show(
+                        onFinished: () {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            '/versus/lobby',
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // ボタン2：みんなと対戦
+                  card(
+                    icon: Icons.group,
+                    title: 'みんなと対戦',
+                    subtitle: '全国のユーザーとランダムマッチ',
+                    onTap: () {
+                      InterstitialAdManager.show(
+                        onFinished: () {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            '/versus/lobby',
+                          );
+                        },
                       );
                     },
                   ),
