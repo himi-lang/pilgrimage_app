@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class VersusService {
   final _db = FirebaseFirestore.instance;
@@ -13,23 +14,52 @@ class VersusService {
 
   /// クイックマッチ。待機中の公開ルームに入る。無ければ作る。
   Future<String> quickJoin({String difficulty = 'normal'}) async {
-    final qs =
-        await _db
-            .collection('rooms')
-            .where('isPrivate', isEqualTo: false)
-            .where('status', isEqualTo: 'waiting')
-            .where('difficulty', isEqualTo: difficulty)
-            .orderBy('createdAt', descending: false)
-            .limit(5)
-            .get();
-
-    String roomId;
-    if (qs.docs.isEmpty) {
-      roomId = await _createRoomDoc(isPrivate: false, difficulty: difficulty);
-    } else {
-      roomId = qs.docs.first.id;
+    final me = uid;
+    if (me == null) {
+      throw StateError('Not signed in');
     }
+
+    // 同時参加レース対策:
+    // 1) 探す 2) 少し待ってもう一度探す 3) それでも無ければ作る
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final found = await _findOpenPublicRoom(
+        difficulty: difficulty,
+        excludeHostUid: me,
+      );
+      if (found != null) {
+        final joined = await _tryJoinPublicRoom(found);
+        if (joined) return found;
+      }
+
+      await Future<void>.delayed(
+        Duration(milliseconds: 250 + Random().nextInt(550)),
+      );
+
+      final foundAfterWait = await _findOpenPublicRoom(
+        difficulty: difficulty,
+        excludeHostUid: me,
+      );
+      if (foundAfterWait != null) {
+        final joined = await _tryJoinPublicRoom(foundAfterWait);
+        if (joined) return foundAfterWait;
+      }
+    }
+
+    final roomId = await _createRoomDoc(isPrivate: false, difficulty: difficulty);
     await _joinRoom(roomId);
+
+    // 同時作成で分断した場合、他の公開待機ルームへ寄せる
+    final candidate = await _findOpenPublicRoom(
+      difficulty: difficulty,
+      excludeHostUid: me,
+    );
+    if (candidate != null && candidate != roomId) {
+      final joined = await _tryJoinPublicRoom(candidate);
+      if (joined) {
+        await leaveRoom(roomId);
+        return candidate;
+      }
+    }
     return roomId;
   }
 
@@ -57,7 +87,7 @@ class VersusService {
             .get();
     if (qs.docs.isEmpty) return null;
     final id = qs.docs.first.id;
-    await _joinRoom(id);
+    await _joinRoom(id, enforceCapacity: true);
     return id;
   }
 
@@ -65,12 +95,33 @@ class VersusService {
   Future<void> leaveRoom(String roomId) async {
     final u = uid;
     if (u == null) return;
-    final ref = _db
-        .collection('rooms')
-        .doc(roomId)
-        .collection('players')
-        .doc(u);
-    await ref.delete();
+    final roomRef = _db.collection('rooms').doc(roomId);
+    final playerRef = roomRef.collection('players').doc(u);
+    final rematchRef = roomRef.collection('rematch').doc(u);
+    await _db.runTransaction((tx) async {
+      final roomSnap = await tx.get(roomRef);
+      if (!roomSnap.exists) return;
+      final playerSnap = await tx.get(playerRef);
+      if (!playerSnap.exists) return;
+
+      final data = roomSnap.data() ?? <String, dynamic>{};
+      final count = (data['playerCount'] ?? 0) as int;
+      final newCount = max(0, count - 1);
+
+      tx.delete(playerRef);
+      tx.delete(rematchRef);
+
+      if (newCount == 0) {
+        tx.delete(roomRef);
+        return;
+      }
+
+      final patch = <String, dynamic>{
+        'playerCount': newCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      tx.update(roomRef, patch);
+    });
   }
 
   // ========= 対戦進行 =========
@@ -89,6 +140,42 @@ class VersusService {
       'questions': questions,
       'roundStartedAt': FieldValue.serverTimestamp(),
       'finishedAt': FieldValue.delete(),
+      'startingBy': FieldValue.delete(),
+      'startLockAt': FieldValue.delete(),
+      'publicCountdownStartedAt': FieldValue.delete(),
+    });
+  }
+
+  Future<bool> tryAcquireStartLock(String roomId) async {
+    final u = uid;
+    if (u == null) return false;
+    final roomRef = _db.collection('rooms').doc(roomId);
+    var acquired = false;
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(roomRef);
+      if (!snap.exists) return;
+      final data = snap.data() ?? <String, dynamic>{};
+      final status = (data['status'] ?? 'waiting').toString();
+      if (status != 'waiting') return;
+
+      final startingBy = (data['startingBy'] ?? '').toString();
+      if (startingBy.isNotEmpty && startingBy != u) return;
+
+      tx.update(roomRef, {
+        'startingBy': u,
+        'startLockAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      acquired = true;
+    });
+    return acquired;
+  }
+
+  Future<void> releaseStartLock(String roomId) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'startingBy': FieldValue.delete(),
+      'startLockAt': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -202,22 +289,53 @@ class VersusService {
 
   // ========= 内部ユーティリティ =========
 
-  Future<void> _joinRoom(String roomId) async {
+  Future<void> _joinRoom(String roomId, {bool enforceCapacity = false}) async {
     final u = user;
     if (u == null) return;
     final ref = _db.collection('rooms').doc(roomId);
+    final playerRef = ref.collection('players').doc(u.uid);
 
-    await ref.set({
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _db.runTransaction((tx) async {
+      final roomSnap = await tx.get(ref);
+      if (!roomSnap.exists) {
+        throw StateError('room-not-found');
+      }
+      final playerSnap = await tx.get(playerRef);
+      final data = roomSnap.data() ?? <String, dynamic>{};
+      final status = (data['status'] ?? 'waiting').toString();
+      final playerCount = (data['playerCount'] ?? 0) as int;
+      final alreadyJoined = playerSnap.exists;
 
-    await ref.collection('players').doc(u.uid).set({
-      'uid': u.uid,
-      'displayName': u.displayName ?? 'Player',
-      'photoURL': u.photoURL,
-      'score': 0,
-      'joinedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      if (enforceCapacity && !alreadyJoined && status != 'waiting') {
+        throw StateError('room-closed');
+      }
+      if (enforceCapacity && !alreadyJoined && playerCount >= 2) {
+        throw StateError('room-full');
+      }
+
+      tx.set(
+        playerRef,
+        {
+          'uid': u.uid,
+          'displayName': u.displayName ?? 'Player',
+          'photoURL': u.photoURL,
+          'score': playerSnap.exists ? (playerSnap.data()?['score'] ?? 0) : 0,
+          'startReady': false,
+          'joinedAt':
+              playerSnap.exists
+                  ? (playerSnap.data()?['joinedAt'] ?? FieldValue.serverTimestamp())
+                  : FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      final newCount = alreadyJoined ? playerCount : (playerCount + 1);
+      final patch = <String, dynamic>{
+        'updatedAt': FieldValue.serverTimestamp(),
+        'playerCount': newCount,
+      };
+      tx.update(ref, patch);
+    });
   }
 
   Future<String> _createRoomDoc({
@@ -234,6 +352,7 @@ class VersusService {
       'difficulty': difficulty,
       'round': 0,
       'roundTimeSec': 20,
+      'playerCount': 0,
       'isPrivate': isPrivate,
       'code': code,
       'createdAt': FieldValue.serverTimestamp(),
@@ -272,5 +391,75 @@ class VersusService {
     final remain = (maxMs - timeMs).clamp(0, maxMs);
     final ratio = remain / maxMs; // 0.0〜1.0
     return 100 + (900 * ratio).round();
+  }
+
+  Future<String?> _findOpenPublicRoom({
+    required String difficulty,
+    required String excludeHostUid,
+  }) async {
+    try {
+      final qs =
+          await _db
+              .collection('rooms')
+              .where('isPrivate', isEqualTo: false)
+              .where('status', isEqualTo: 'waiting')
+              .where('difficulty', isEqualTo: difficulty)
+              .limit(12)
+              .get();
+      for (final d in qs.docs) {
+        final data = d.data();
+        final hostUid = (data['hostUid'] ?? '').toString();
+        final playerCount = (data['playerCount'] ?? 0) as int;
+        if (hostUid == excludeHostUid) continue;
+        if (playerCount >= 2) continue;
+        return d.id;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[VersusService] optimized quickJoin query failed: $e');
+      }
+    }
+
+    // フォールバック: インデックス未作成時でも動くように最小条件で取得してクライアント側で絞る
+    try {
+      final qs =
+          await _db
+              .collection('rooms')
+              .where('status', isEqualTo: 'waiting')
+              .limit(30)
+              .get();
+
+      for (final d in qs.docs) {
+        final m = d.data();
+        final isPrivate = (m['isPrivate'] ?? true) as bool;
+        final diff = (m['difficulty'] ?? '').toString();
+        final hostUid = (m['hostUid'] ?? '').toString();
+        final playerCount = (m['playerCount'] ?? 0) as int;
+        if (!isPrivate &&
+            diff == difficulty &&
+            hostUid != excludeHostUid &&
+            playerCount < 2) {
+          return d.id;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[VersusService] fallback quickJoin query failed: $e');
+      }
+    }
+
+    return null;
+  }
+
+  Future<bool> _tryJoinPublicRoom(String roomId) async {
+    try {
+      await _joinRoom(roomId, enforceCapacity: true);
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[VersusService] join candidate failed: $roomId, error=$e');
+      }
+      return false;
+    }
   }
 }

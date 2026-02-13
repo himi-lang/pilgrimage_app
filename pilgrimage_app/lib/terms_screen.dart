@@ -1,4 +1,5 @@
 // lib/terms_screen.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'service/terms_service.dart'; // ★ 追加（パスはこのファイルからの相対）
@@ -10,12 +11,12 @@ class TermsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('利用規約'),
-        automaticallyImplyLeading: false, // 戻るボタンは出さない
+    return CupertinoPageScaffold(
+      navigationBar: const CupertinoNavigationBar(
+        middle: Text('利用規約'),
+        automaticallyImplyLeading: false,
       ),
-      body: SafeArea(
+      child: SafeArea(
         child: Column(
           children: [
             // 規約本文
@@ -24,7 +25,7 @@ class TermsScreen extends StatelessWidget {
                 future: rootBundle.loadString(_termsAssetPath),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(child: CupertinoActivityIndicator());
                   }
                   if (snapshot.hasError) {
                     return Padding(
@@ -36,7 +37,7 @@ class TermsScreen extends StatelessWidget {
                     );
                   }
                   final text = snapshot.data ?? '';
-                  return Scrollbar(
+                  return CupertinoScrollbar(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
                       child: Text(
@@ -58,19 +59,23 @@ class TermsScreen extends StatelessWidget {
                 children: [
                   // 同意しない
                   Expanded(
-                    child: OutlinedButton(
+                    child: CupertinoButton(
                       onPressed: () {
                         // 呼び出し元に false を返して閉じる
                         Navigator.of(context).pop(false);
                       },
-                      child: const Text('同意しない'),
+                      color: CupertinoColors.systemGrey4,
+                      child: const Text(
+                        '同意しない',
+                        style: TextStyle(color: CupertinoColors.white),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
 
                   // 同意する
                   Expanded(
-                    child: FilledButton(
+                    child: CupertinoButton.filled(
                       onPressed: () async {
                         // フラグ保存
                         await TermsService.acceptCurrentTerms();

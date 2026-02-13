@@ -2,6 +2,7 @@
 // ＋ピン選択で画像プレビュー ＋ 画像検索モードから来たときはその作品だけピン表示
 
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -12,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_service.dart';
 import './models/location.dart';
+import 'service/commons_image_service.dart';
 import 'widgets/app_ui.dart';
 
 class MapScreen extends StatefulWidget {
@@ -58,6 +60,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // Firestore
   late final Stream<List<LocationData>> _locationsStream;
   List<LocationData> _all = [];
+  final CommonsImageService _commonsImageService = CommonsImageService();
+  final Map<String, Future<List<String>>> _imageCandidatesCache = {};
 
   // after-buildを1回だけ走らせる
   bool _onceAfterBuildRan = false;
@@ -232,7 +236,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // === 現在地 ===
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showCupertinoDialog<void>(
+      context: context,
+      builder:
+          (_) => CupertinoAlertDialog(
+            content: Text(msg),
+            actions: [
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   Future<LatLng?> _getUserLatLng() async {
@@ -434,6 +451,66 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
   }
 
+  List<String> _imageUrlCandidates(String raw) {
+    final out = <String>[];
+    final seen = <String>{};
+
+    void add(String? value) {
+      final v = (value ?? '').trim();
+      if (v.isEmpty) return;
+      if (seen.add(v)) out.add(v);
+    }
+
+    add(raw);
+    final base = raw.trim();
+    final uri = Uri.tryParse(base);
+
+    if (uri != null && uri.scheme == 'http') {
+      add(base.replaceFirst('http://', 'https://'));
+    }
+
+    if (uri != null && uri.host.contains('drive.google.com')) {
+      String? id;
+      final seg = uri.pathSegments;
+      final fileIdx = seg.indexOf('file');
+      if (fileIdx >= 0 && seg.length > fileIdx + 2 && seg[fileIdx + 1] == 'd') {
+        id = seg[fileIdx + 2];
+      }
+      id ??= uri.queryParameters['id'];
+      if (id != null && id.isNotEmpty) {
+        add('https://drive.google.com/uc?export=view&id=$id');
+      }
+    }
+
+    return out.where(_isValidImageUrl).toList(growable: false);
+  }
+
+  Future<List<String>> _resolveImageCandidates(String raw) async {
+    final direct = _imageUrlCandidates(raw);
+    String? resolved;
+    if (_commonsImageService.isCommonsCandidate(raw)) {
+      resolved = await _commonsImageService.resolveThumbUrl(raw, width: 960);
+    }
+
+    final all = <String>[];
+    final seen = <String>{};
+    for (final u in direct) {
+      if (seen.add(u)) all.add(u);
+    }
+    if (resolved != null && _isValidImageUrl(resolved) && seen.add(resolved)) {
+      all.add(resolved);
+    }
+    return all;
+  }
+
+  Future<List<String>> _resolveImageCandidatesCached(String raw) {
+    final key = raw.trim();
+    return _imageCandidatesCache.putIfAbsent(
+      key,
+      () => _resolveImageCandidates(key),
+    );
+  }
+
   void _openImageViewer(String url, String title) {
     showDialog(
       context: context,
@@ -449,7 +526,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       url,
                       fit: BoxFit.contain,
                       filterQuality: FilterQuality.low,
-                      cacheWidth: 1280,
+                      cacheWidth: 960,
+                      headers: const {'User-Agent': 'Mozilla/5.0'},
                       errorBuilder:
                           (_, __, ___) => const Center(
                             child: Icon(Icons.broken_image_outlined, size: 48),
@@ -473,44 +551,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildSpotImage(LocationData d) {
-    final url = d.image.trim();
-    if (!_isValidImageUrl(url)) return const SizedBox.shrink();
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: () => _openImageViewer(url, d.name),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(color: Colors.black12),
-                  Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.low,
-                    cacheWidth: 1280,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      );
-                    },
-                    errorBuilder: (context, error, stack) {
-                      return const Center(
-                        child: Icon(Icons.broken_image_outlined, size: 48),
-                      );
-                    },
+    final raw = d.image.trim();
+    if (raw.isEmpty) return const SizedBox.shrink();
+    return FutureBuilder<List<String>>(
+      future: _resolveImageCandidatesCached(raw),
+      builder: (context, snap) {
+        final urls = snap.data ?? const <String>[];
+        return Column(
+          children: [
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: urls.isEmpty ? null : () => _openImageViewer(urls.first, d.name),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Container(color: Colors.black12),
+                      if (!snap.hasData)
+                        const Center(child: CupertinoActivityIndicator())
+                      else
+                        _SpotImageWithFallback(urls: urls),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -631,66 +702,42 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('マップアプリを開けませんでした')));
+      _showSnack('マップアプリを開けませんでした');
     }
   }
 
   // --- AppBar（検索ボックス付き） ---
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      titleSpacing: 0,
-      title: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: TextField(
+  ObstructingPreferredSizeWidget _buildAppBar() {
+    return CupertinoNavigationBar(
+      middle: SizedBox(
+        width: double.infinity,
+        child: CupertinoSearchTextField(
           controller: _searchCtrl,
-          decoration: InputDecoration(
-            hintText: '作品名・スポット名・住所',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon:
-                _searchCtrl.text.isEmpty
-                    ? null
-                    : IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        setState(() {
-                          _showCandidates = false;
-                          _pinsLocked = false;
-                          _lockedPinIds.clear();
-                        });
-                      },
-                    ),
-            filled: true,
-            fillColor: Colors.white,
-            isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            hintStyle: const TextStyle(color: Colors.black38),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
-            ),
-          ),
+          placeholder: '作品名・スポット名・住所',
+          autocorrect: false,
           onChanged: (v) {
             _searchDebounce?.cancel();
             _showCandidates = v.trim().isNotEmpty;
-            _pinsLocked = false; // 入力し直したら固定解除
+            _pinsLocked = false;
             _searchDebounce = Timer(const Duration(milliseconds: 180), () {
               if (mounted) setState(() {});
             });
           },
-          onSubmitted: (v) => _confirmSearch(v),
-          textInputAction: TextInputAction.search,
+          onSubmitted: _confirmSearch,
+          onSuffixTap: () {
+            _searchCtrl.clear();
+            setState(() {
+              _showCandidates = false;
+              _pinsLocked = false;
+              _lockedPinIds.clear();
+            });
+          },
         ),
       ),
-      actions: const [
-        ModeSwitchButton(currentMode: AppMode.map),
-        AppMenuButton(),
-      ],
+      trailing: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [ModeSwitchButton(currentMode: AppMode.map), AppMenuButton()],
+      ),
     );
   }
 
@@ -698,9 +745,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final candidates = _filter(_all, v).take(20).toList();
     if (candidates.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('該当がありません')));
+      _showSnack('該当がありません');
       setState(() {
         _pinsLocked = false;
         _lockedPinIds.clear();
@@ -790,12 +835,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return CupertinoPageScaffold(
       backgroundColor: const Color(0xFF101214),
-      appBar: _buildAppBar(),
-      body: StreamBuilder<List<LocationData>>(
-        stream: _locationsStream,
-        builder: (context, snap) {
+      navigationBar: _buildAppBar(),
+      child: Material(
+        color: Colors.transparent,
+        child: StreamBuilder<List<LocationData>>(
+          stream: _locationsStream,
+          builder: (context, snap) {
           if (snap.hasError) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _showSnack('データ取得エラー: ${snap.error}');
@@ -832,7 +879,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           // ズームに応じてマーカーを間引いてから描画
           final currentZoom = _lastCamera?.zoom ?? 12.0;
           final renderList =
-              visible; // もし動作が重いとき、ピンを間引く_downsample(visible, currentZoom, max: 900);
+              _downsample(visible, currentZoom, max: 700);
 
           final markers =
               renderList
@@ -883,8 +930,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             });
           }
 
-          return Stack(
-            children: [
+            return Stack(
+              children: [
               Positioned.fill(child: Container(color: const Color(0xFF101214))),
               GoogleMap(
                 initialCameraPosition: _initialCamera,
@@ -901,6 +948,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 cameraTargetBounds: CameraTargetBounds.unbounded,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: true,
+                mapToolbarEnabled: false,
                 zoomControlsEnabled: false,
                 zoomGesturesEnabled: true,
                 tiltGesturesEnabled: true,
@@ -938,10 +986,64 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
+    );
+  }
+}
+
+class _SpotImageWithFallback extends StatefulWidget {
+  final List<String> urls;
+  const _SpotImageWithFallback({required this.urls});
+
+  @override
+  State<_SpotImageWithFallback> createState() => _SpotImageWithFallbackState();
+}
+
+class _SpotImageWithFallbackState extends State<_SpotImageWithFallback> {
+  int _index = 0;
+
+  @override
+  void didUpdateWidget(covariant _SpotImageWithFallback oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.urls.join('|') != oldWidget.urls.join('|')) {
+      _index = 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.urls.isEmpty) {
+      return const Center(child: Icon(Icons.broken_image_outlined, size: 48));
+    }
+
+    final url = widget.urls[_index];
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.low,
+      cacheWidth: 720,
+      headers: const {'User-Agent': 'Mozilla/5.0'},
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      },
+      errorBuilder: (context, error, stack) {
+        if (_index < widget.urls.length - 1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _index++;
+              });
+            }
+          });
+          return const Center(child: CupertinoActivityIndicator());
+        }
+        return const Center(child: Icon(Icons.broken_image_outlined, size: 48));
+      },
     );
   }
 }

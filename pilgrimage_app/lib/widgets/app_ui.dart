@@ -1,8 +1,7 @@
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pilgrimage_app/firebase_service.dart';
 import '../service/auth_service.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -28,9 +27,10 @@ class ModeSwitchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'モード選択へ',
-      icon: const Icon(Icons.apps), // ← 好きなアイコンに変えてOK（home_outlined とか）
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minSize: 30,
+      child: const Icon(CupertinoIcons.square_grid_2x2),
       onPressed: () async {
         // ルームから出るときの確認をしたい画面では、これまで通り confirm/beforeNavigate が使える
         if (confirm != null) {
@@ -45,7 +45,7 @@ class ModeSwitchButton extends StatelessWidget {
 
         // ★ モード選択画面に戻る
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+          CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
           (route) => false, // それ以前の画面スタックを全部クリア
         );
       },
@@ -54,7 +54,7 @@ class ModeSwitchButton extends StatelessWidget {
 }
 
 /// 共通AppBar（右端：モード切替 → 追加actions → ログアウト）
-PreferredSizeWidget commonAppBar(
+ObstructingPreferredSizeWidget commonAppBar(
   BuildContext context, {
   required String title,
   List<Widget> actionsExtra = const [],
@@ -62,18 +62,20 @@ PreferredSizeWidget commonAppBar(
   Future<bool> Function()? modeConfirm,
   Future<void> Function()? modeBeforeNavigate,
 }) {
-  return AppBar(
-    title: Text(title),
-    actions: [
-      if (currentMode != null)
-        ModeSwitchButton(
-          currentMode: currentMode,
-          confirm: modeConfirm,
-          beforeNavigate: modeBeforeNavigate,
-        ),
-      ...actionsExtra,
-      const AppMenuButton(),
-    ],
+  final trailingChildren = <Widget>[
+    if (currentMode != null)
+      ModeSwitchButton(
+        currentMode: currentMode,
+        confirm: modeConfirm,
+        beforeNavigate: modeBeforeNavigate,
+      ),
+    ...actionsExtra,
+    const AppMenuButton(),
+  ];
+
+  return CupertinoNavigationBar(
+    middle: Text(title),
+    trailing: Row(mainAxisSize: MainAxisSize.min, children: trailingChildren),
   );
 }
 
@@ -83,9 +85,10 @@ class AppMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'メニュー',
-      icon: const Icon(Icons.menu),
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minSize: 30,
+      child: const Icon(CupertinoIcons.line_horizontal_3),
       onPressed: () => _openAppMenu(context),
     );
   }
@@ -122,15 +125,33 @@ void _openAppMenu(BuildContext outerContext) {
               ),
               ListTile(
                 leading: const Icon(Icons.person),
-                title: const Text('プロフィール編集'),
-                subtitle: const Text('表示名・アイコンURLを変更'),
+                title: const Text(
+                  'プロフィール編集',
+                  style: TextStyle(
+                    color: CupertinoColors.black,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                subtitle: const Text(
+                  '表示名・アイコンURLを変更',
+                  style: TextStyle(
+                    color: CupertinoColors.black,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
                 onTap: () {
                   _showProfileDialog(outerContext);
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.logout),
-                title: const Text('ログアウト'),
+                title: const Text(
+                  'ログアウト',
+                  style: TextStyle(
+                    color: CupertinoColors.black,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
                 onTap: () {
                   AuthService.signOutAndGoRoot(outerContext);
                 },
@@ -178,8 +199,20 @@ void _openAppMenu(BuildContext outerContext) {
               // バージョン情報
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('バージョン情報'),
-                subtitle: const Text('アプリのバージョンを表示'),
+                title: const Text(
+                  'バージョン情報',
+                  style: TextStyle(
+                    color: CupertinoColors.black,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                subtitle: const Text(
+                  'アプリのバージョンを表示',
+                  style: TextStyle(
+                    color: CupertinoColors.black,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
                 onTap: () {
                   _openInfoPage(
                     outerContext,
@@ -234,9 +267,19 @@ ListTile _policyTile(
 }) {
   return ListTile(
     leading: Icon(icon),
-    title: Text(title),
+    title: Text(
+      title,
+      style: const TextStyle(
+        color: CupertinoColors.black,
+        decoration: TextDecoration.none,
+      ),
+    ),
     subtitle: Text(
       assetPath != null ? "タップして内容を表示" : (placeholder ?? '内容は後で追加されます'),
+      style: const TextStyle(
+        color: CupertinoColors.black,
+        decoration: TextDecoration.none,
+      ),
     ),
     onTap: () async {
       String body;
@@ -262,7 +305,7 @@ void _openInfoPage(
   required String body,
 }) {
   Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => _InfoPage(title: title, body: body)),
+    CupertinoPageRoute(builder: (_) => _InfoPage(title: title, body: body)),
   );
 }
 
@@ -272,15 +315,21 @@ class _InfoPage extends StatelessWidget {
   const _InfoPage({required this.title, required this.body});
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
-        child: Scrollbar(
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(middle: Text(title)),
+      child: SafeArea(
+        child: CupertinoScrollbar(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Text(
               body,
-              style: const TextStyle(fontSize: 15, height: 1.4),
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                color: CupertinoColors.black,
+                decoration: TextDecoration.none,
+                decorationColor: CupertinoColors.transparent,
+              ),
             ),
           ),
         ),

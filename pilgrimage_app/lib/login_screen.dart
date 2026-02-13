@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -31,7 +31,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showCupertinoDialog<void>(
+      context: context,
+      builder:
+          (_) => CupertinoAlertDialog(
+            content: Text(msg),
+            actions: [
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   Future<void> _handleEmail() async {
@@ -61,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+        CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
       );
     } on FirebaseAuthException catch (e) {
       _toast(e.message ?? '認証エラーが発生しました');
@@ -86,12 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await GoogleSignIn.instance.initialize();
 
         final googleUser = await GoogleSignIn.instance.authenticate();
-        if (googleUser == null) {
-          _toast('キャンセルされました');
-          return;
-        }
-
-        final googleAuth = await googleUser.authentication;
+        final googleAuth = googleUser.authentication;
 
         final credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.idToken,
@@ -105,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       _toast('ログインしました');
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+        CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
       );
     } on FirebaseAuthException catch (e) {
       _toast(e.message ?? 'Googleサインインでエラーが発生しました');
@@ -119,9 +127,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final title = _isSignUp ? '新規登録' : 'ログイン';
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: SafeArea(
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(middle: Text(title)),
+      child: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
@@ -130,45 +138,57 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
+                  const Text('メールアドレス'),
+                  const SizedBox(height: 6),
+                  CupertinoTextField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'メールアドレス'),
+                    placeholder: 'example@example.com',
+                    enabled: !_busy,
+                    autocorrect: false,
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  const Text('パスワード（6文字以上）'),
+                  const SizedBox(height: 6),
+                  CupertinoTextField(
                     controller: _pass,
                     obscureText: _obscure,
-                    decoration: InputDecoration(
-                      labelText: 'パスワード（6文字以上）',
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(
-                          _obscure ? Icons.visibility : Icons.visibility_off,
-                        ),
+                    enabled: !_busy,
+                    autocorrect: false,
+                    suffix: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minSize: 30,
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                      child: Icon(
+                        _obscure
+                            ? CupertinoIcons.eye
+                            : CupertinoIcons.eye_slash,
+                        size: 20,
                       ),
                     ),
                   ),
                   if (_isSignUp) ...[
                     const SizedBox(height: 12),
-                    TextField(
+                    const Text('表示名（任意）'),
+                    const SizedBox(height: 6),
+                    CupertinoTextField(
                       controller: _name,
-                      decoration: const InputDecoration(labelText: '表示名（任意）'),
+                      enabled: !_busy,
+                      autocorrect: false,
                     ),
                   ],
                   const SizedBox(height: 16),
-                  FilledButton(
+                  CupertinoButton.filled(
                     onPressed: _busy ? null : _handleEmail,
                     child: Text(title),
                   ),
                   const SizedBox(height: 8),
-                  OutlinedButton.icon(
+                  CupertinoButton(
                     onPressed: _busy ? null : _handleGoogle,
-                    icon: const Icon(Icons.login),
-                    label: const Text('Googleで続ける'),
+                    child: const Text('Googleで続ける'),
                   ),
                   const SizedBox(height: 8),
-                  TextButton(
+                  CupertinoButton(
                     onPressed:
                         _busy
                             ? null
@@ -181,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   if (_busy) ...[
                     const SizedBox(height: 16),
-                    const Center(child: CircularProgressIndicator()),
+                    const Center(child: CupertinoActivityIndicator()),
                   ],
                 ],
               ),

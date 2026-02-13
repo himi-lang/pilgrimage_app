@@ -1,4 +1,5 @@
 // lib/start_screen.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -53,7 +54,7 @@ class _StartScreenState extends State<StartScreen> {
     if (needTerms) {
       final accepted =
           await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const TermsScreen()),
+            CupertinoPageRoute(builder: (_) => const TermsScreen()),
           ) ??
           false;
 
@@ -73,20 +74,20 @@ class _StartScreenState extends State<StartScreen> {
       // 未ログイン → ログイン画面へ
       Navigator.of(
         context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+      ).pushReplacement(CupertinoPageRoute(builder: (_) => const LoginScreen()));
     } else {
       // ログイン済み → モード選択へ
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ModeSelectionScreen()),
+        CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return CupertinoPageScaffold(
       backgroundColor: Colors.black, // ★ フェード後は黒背景に
-      body: GestureDetector(
+      child: GestureDetector(
         onTap: _handleTap,
         child: AnimatedOpacity(
           opacity: _opacity,
@@ -109,15 +110,17 @@ class _StartScreenState extends State<StartScreen> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.55),
+                      color: Colors.white.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: const Text(
                       'タップしてスタート',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black,
                         fontSize: 18,
                         letterSpacing: 2,
+                        decoration: TextDecoration.none,
+                        decorationColor: Colors.transparent,
                       ),
                     ),
                   ),

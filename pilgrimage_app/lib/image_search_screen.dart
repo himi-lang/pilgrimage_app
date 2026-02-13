@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'map_screen.dart';
@@ -19,8 +20,8 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: commonAppBar(
+    return CupertinoPageScaffold(
+      navigationBar: commonAppBar(
         context,
         title: '画像検索モード',
         currentMode: AppMode.map,
@@ -32,34 +33,30 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
           //),
         ],
       ),
-      body: Column(
-        children: [
-          // ★ 作品名検索欄
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: TextField(
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText: '作品名で検索',
-                isDense: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          children: [
+            // ★ 作品名検索欄
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: CupertinoSearchTextField(
+                placeholder: '作品名で検索',
+                autocorrect: false,
+                onChanged:
+                    (value) =>
+                        setState(() => _query = value.trim().toLowerCase()),
               ),
-              onChanged:
-                  (value) =>
-                      setState(() => _query = value.trim().toLowerCase()),
             ),
-          ),
-          const SizedBox(height: 4),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream:
-                  FirebaseFirestore.instance
-                      .collection('作品一覧フライヤー')
-                      .orderBy(FieldPath.documentId)
-                      .snapshots(),
-              builder: (context, snap) {
+            const SizedBox(height: 4),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('作品一覧フライヤー')
+                        .orderBy(FieldPath.documentId)
+                        .snapshots(),
+                builder: (context, snap) {
                 if (snap.hasError) {
                   return Center(
                     child: Text(
@@ -69,7 +66,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                   );
                 }
                 if (!snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CupertinoActivityIndicator());
                 }
 
                 final docs = snap.data!.docs;
@@ -117,10 +114,11 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                     },
                   );
                 }
-              },
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -138,7 +136,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
       onTap: () {
         // ★ 画像タップ → MapScreen へ
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => MapScreen(initialWorkTitle: title)),
+          CupertinoPageRoute(builder: (_) => MapScreen(initialWorkTitle: title)),
         );
       },
       child: Card(
@@ -152,9 +150,12 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
               child:
                   imageUrl.isEmpty
                       ? const Center(child: Icon(Icons.image_not_supported))
-                      : Image.network(
+                  : Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
+                        cacheWidth: 420,
+                        filterQuality: FilterQuality.low,
+                        headers: const {'User-Agent': 'Mozilla/5.0'},
                         errorBuilder:
                             (_, __, ___) =>
                                 const Center(child: Icon(Icons.broken_image)),

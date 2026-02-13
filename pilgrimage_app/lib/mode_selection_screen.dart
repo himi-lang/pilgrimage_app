@@ -1,4 +1,5 @@
 // lib/mode_selection_screen.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'widgets/app_ui.dart';
 import 'map_screen.dart';
@@ -41,55 +42,61 @@ class ModeSelectionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+              const Icon(CupertinoIcons.chevron_right),
             ],
           ),
         ),
       );
     }
 
-    return Scaffold(
-      appBar: commonAppBar(context, title: 'Anime Atlas'),
-      body: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                children: [
-                  // ★ 聖地マップモード → マップ用サブメニュー
-                  card(
-                    icon: Icons.map,
-                    title: '聖地マップモード',
-                    subtitle: '地図で探す・作品から探す',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MapModeMenuScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // ★ 対戦モード → 対戦モード用サブメニュー
-                  card(
-                    icon: Icons.sports_esports,
-                    title: '対戦モード',
-                    subtitle: '早押しクイズ：みんなと / プライベート',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const VersusModeMenuScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('Anime Atlas'),
+        trailing: AppMenuButton(),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ListView(
+                  children: [
+                    // ★ 聖地マップモード → マップ用サブメニュー
+                    card(
+                      icon: Icons.map,
+                      title: '聖地マップモード',
+                      subtitle: '地図で探す・作品から探す',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute(
+                            builder: (_) => const MapModeMenuScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // ★ 対戦モード → 対戦モード用サブメニュー
+                    card(
+                      icon: Icons.sports_esports,
+                      title: '対戦モード',
+                      subtitle: '早押しクイズ：みんなと / プライベート',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute(
+                            builder: (_) => const VersusModeMenuScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const BottomBannerAd(),
-        ],
+            const BottomBannerAd(),
+          ],
+        ),
       ),
     );
   }
@@ -131,55 +138,58 @@ class MapModeMenuScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+              const Icon(CupertinoIcons.chevron_right),
             ],
           ),
         ),
       );
     }
 
-    return Scaffold(
-      appBar: commonAppBar(
+    return CupertinoPageScaffold(
+      navigationBar: commonAppBar(
         context,
         title: '聖地マップモード',
         currentMode: AppMode.map,
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                children: [
-                  card(
-                    icon: Icons.map_outlined,
-                    title: '地図から探す',
-                    subtitle: '地図からスポットを発見・検索',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const MapScreen()),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  card(
-                    icon: Icons.image_search,
-                    title: '作品から探す',
-                    subtitle: 'アニメ作品を検索・タップ',
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ImageSearchScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ListView(
+                  children: [
+                    card(
+                      icon: Icons.map_outlined,
+                      title: '地図から探す',
+                      subtitle: '地図からスポットを発見・検索',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute(builder: (_) => const MapScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    card(
+                      icon: Icons.image_search,
+                      title: '作品から探す',
+                      subtitle: 'アニメ作品を検索・タップ',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          CupertinoPageRoute(
+                            builder: (_) => const ImageSearchScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const BottomBannerAd(),
-        ],
+            const BottomBannerAd(),
+          ],
+        ),
       ),
     );
   }
@@ -223,66 +233,69 @@ class VersusModeMenuScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+              const Icon(CupertinoIcons.chevron_right),
             ],
           ),
         ),
       );
     }
 
-    return Scaffold(
-      appBar: commonAppBar(
+    return CupertinoPageScaffold(
+      navigationBar: commonAppBar(
         context,
         title: '対戦モード',
         // AppMode に versus があれば渡してもOK
         // currentMode: AppMode.versus,
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                children: [
-                  // ボタン1：プライベート対戦
-                  card(
-                    icon: Icons.lock,
-                    title: 'プライベート対戦',
-                    subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
-                    onTap: () {
-                      InterstitialAdManager.show(
-                        onFinished: () {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            '/versus/lobby',
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // ボタン2：みんなと対戦
-                  card(
-                    icon: Icons.group,
-                    title: 'みんなと対戦',
-                    subtitle: '全国のユーザーとランダムマッチ',
-                    onTap: () {
-                      InterstitialAdManager.show(
-                        onFinished: () {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            '/versus/lobby',
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ],
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ListView(
+                  children: [
+                    // ボタン1：プライベート対戦
+                    card(
+                      icon: Icons.lock,
+                      title: 'プライベート対戦',
+                      subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
+                      onTap: () {
+                        InterstitialAdManager.show(
+                          onFinished: () {
+                            Navigator.pushReplacementNamed(
+                              context,
+                              '/versus/lobby',
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // ボタン2：みんなと対戦
+                    card(
+                      icon: Icons.group,
+                      title: 'みんなと対戦',
+                      subtitle: '全国のユーザーとランダムマッチ',
+                      onTap: () {
+                        InterstitialAdManager.show(
+                          onFinished: () {
+                            Navigator.pushReplacementNamed(
+                              context,
+                              '/versus/public_wait',
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const BottomBannerAd(),
-        ],
+            const BottomBannerAd(),
+          ],
+        ),
       ),
     );
   }

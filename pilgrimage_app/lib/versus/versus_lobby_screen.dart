@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../widgets/app_ui.dart';
 import 'versus_service.dart';
@@ -22,7 +23,20 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showCupertinoDialog<void>(
+      context: context,
+      builder:
+          (_) => CupertinoAlertDialog(
+            content: Text(msg),
+            actions: [
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+    );
   }
 
   Future<void> _quickMatch() async {
@@ -77,17 +91,14 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      appBar: commonAppBar(
+    return CupertinoPageScaffold(
+      navigationBar: commonAppBar(
         context,
         title: '対戦ロビー',
         currentMode: AppMode.versus,
       ),
-      body: Container(
+      child: Container(
         // ★ 背景画像
         decoration: const BoxDecoration(
           image: DecorationImage(
@@ -102,42 +113,54 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'easy', label: Text('Easy')),
-                  //ButtonSegment(value: 'normal', label: Text('Normal')),
-                  //ButtonSegment(value: 'hard', label: Text('Hard')),
-                ],
-                selected: {difficulty},
-                onSelectionChanged: (v) => setState(() => difficulty = v.first),
+              CupertinoSlidingSegmentedControl<String>(
+                groupValue: difficulty,
+                children: const {
+                  'easy': Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Text('Easy'),
+                  ),
+                  'normal': Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Text('Normal'),
+                  ),
+                  'hard': Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Text('Hard'),
+                  ),
+                },
+                onValueChanged: (v) {
+                  if (v != null) {
+                    setState(() => difficulty = v);
+                  }
+                },
               ),
               const SizedBox(height: 16),
-              FilledButton.icon(
+              CupertinoButton.filled(
                 onPressed: _busy ? null : _quickMatch,
-                icon: const Icon(Icons.flash_on),
-                label: Text(_busy ? '接続中…' : 'クイックマッチ'),
+                child: Text(_busy ? '接続中…' : 'クイックマッチ'),
               ),
               const Divider(height: 32),
               Text('プライベートマッチ', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              OutlinedButton.icon(
+              CupertinoButton(
                 onPressed: _busy ? null : _createPrivate,
-                icon: const Icon(Icons.lock),
-                label: const Text('部屋を作る'),
-                style: OutlinedButton.styleFrom(foregroundColor: cs.onSurface),
+                color: CupertinoColors.systemGrey5,
+                child: const Text('部屋を作る'),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
+                    child: CupertinoTextField(
                       controller: codeCtrl,
                       textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(hintText: '招待コード6桁'),
+                      placeholder: '招待コード6桁',
+                      autocorrect: false,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton(
+                  CupertinoButton.filled(
                     onPressed: _busy ? null : _joinByCode,
                     child: const Text('参加'),
                   ),

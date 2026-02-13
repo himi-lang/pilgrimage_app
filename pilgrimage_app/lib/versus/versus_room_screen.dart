@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../widgets/app_ui.dart';
+import '../service/spot_image.dart';
 import 'versus_service.dart';
 import 'versus_lobby_screen.dart';
 
@@ -28,6 +30,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
   bool get isHost => _hostUid == _auth.currentUser?.uid;
   String? _hostUid;
+  bool _startingInProgress = false;
 
   // 自動進行監視
   StreamSubscription? _autoAnsSub;
@@ -91,7 +94,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     await _svc.leaveRoom(widget.roomId);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const VersusLobbyScreen()),
+      CupertinoPageRoute(builder: (_) => const VersusLobbyScreen()),
       (_) => false,
     );
   }
@@ -126,7 +129,11 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
   // ===== 開始ボタン =====
   Future<void> _handleStart(Map<String, dynamic> data) async {
+    if (_startingInProgress) return;
+    _startingInProgress = true;
     try {
+      final locked = await _svc.tryAcquireStartLock(widget.roomId);
+      if (!locked) return;
       if (!mounted) return;
       if (!_MUTE_SNACK) {
         ScaffoldMessenger.of(
@@ -138,6 +145,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         count: 5,
       );
       if (qs.isEmpty) {
+        await _svc.releaseStartLock(widget.roomId);
         if (!mounted) return;
         if (!_MUTE_SNACK) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -153,11 +161,14 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         ).showSnackBar(const SnackBar(content: Text('対戦を開始しました')));
       }
     } catch (e) {
+      await _svc.releaseStartLock(widget.roomId);
       if (!_MUTE_SNACK && mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('開始に失敗: $e')));
       }
+    } finally {
+      _startingInProgress = false;
     }
   }
 
@@ -215,13 +226,21 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
       stream: roomRef.snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return const CupertinoPageScaffold(
+            child: Material(
+              color: Colors.transparent,
+              child: Center(child: CupertinoActivityIndicator()),
+            ),
           );
         }
         final data = snap.data!.data();
         if (data == null) {
-          return const Scaffold(body: Center(child: Text('部屋が削除されました')));
+          return const CupertinoPageScaffold(
+            child: Material(
+              color: Colors.transparent,
+              child: Center(child: Text('部屋が削除されました')),
+            ),
+          );
         }
         _hostUid = data['hostUid'] as String?;
         final status = (data['status'] as String?) ?? 'waiting';
@@ -255,8 +274,8 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
             if (ok) await _svc.leaveRoom(widget.roomId);
             return ok;
           },
-          child: Scaffold(
-            appBar: commonAppBar(
+          child: CupertinoPageScaffold(
+            navigationBar: commonAppBar(
               context,
               title: '対戦ルーム',
               currentMode: AppMode.versus,
@@ -271,27 +290,36 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                       ),
                     ),
                   ),
-                IconButton(
-                  tooltip: 'ロビーへ',
-                  icon: const Icon(Icons.home_outlined),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minSize: 30,
                   onPressed: () async {
                     final ok = await _confirmLeaveRoom(context);
                     if (ok) await _goLobby();
                   },
+                  child: const Icon(CupertinoIcons.home),
                 ),
               ],
               modeConfirm: () => _confirmLeaveRoom(context),
               modeBeforeNavigate: () => _svc.leaveRoom(widget.roomId),
             ),
-            body: Column(
-              children: [
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                children: [
                 _PlayersList(roomId: widget.roomId),
                 const Divider(height: 1),
                 Expanded(
                   child: () {
                     if (status == 'waiting') {
-                      return _WaitingPane(
-                        isHost: isHost,
+                      if (hasCode) {
+                        return _WaitingPane(
+                          isHost: isHost,
+                          onStart: () => _handleStart(data),
+                        );
+                      }
+                      return _PublicWaitingPane(
+                        roomId: widget.roomId,
                         onStart: () => _handleStart(data),
                       );
                     }
@@ -362,7 +390,8 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                     );
                   }(),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -504,6 +533,189 @@ class _WaitingPane extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _PublicWaitingPane extends StatefulWidget {
+  final String roomId;
+  final Future<void> Function() onStart;
+  const _PublicWaitingPane({required this.roomId, required this.onStart});
+
+  @override
+  State<_PublicWaitingPane> createState() => _PublicWaitingPaneState();
+}
+
+class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
+  static const int _targetPlayers = 4;
+  static const int _minPlayersToStart = 2;
+  static const int _countdownSec = 30;
+
+  final _db = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+  Timer? _ticker;
+  bool _starting = false;
+  bool _syncingCountdown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _setReady(bool ready) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final ref =
+        _db.collection('rooms').doc(widget.roomId).collection('players').doc(uid);
+    await ref.set({'startReady': ready}, SetOptions(merge: true));
+  }
+
+  Future<void> _syncCountdown({
+    required int playersCount,
+    required Timestamp? countdownStartedAt,
+  }) async {
+    if (_syncingCountdown) return;
+    final roomRef = _db.collection('rooms').doc(widget.roomId);
+    _syncingCountdown = true;
+    try {
+      await _db.runTransaction((tx) async {
+        final snap = await tx.get(roomRef);
+        if (!snap.exists) return;
+        final data = snap.data() ?? <String, dynamic>{};
+        final status = (data['status'] ?? 'waiting').toString();
+        if (status != 'waiting') return;
+        final hasCountdown = data['publicCountdownStartedAt'] != null;
+
+        if (playersCount >= _minPlayersToStart && !hasCountdown) {
+          tx.update(roomRef, {
+            'publicCountdownStartedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else if (playersCount < _minPlayersToStart && hasCountdown) {
+          tx.update(roomRef, {
+            'publicCountdownStartedAt': FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } else if (playersCount >= _minPlayersToStart && countdownStartedAt == null) {
+          tx.update(roomRef, {
+            'publicCountdownStartedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+    } catch (_) {
+      // noop
+    } finally {
+      _syncingCountdown = false;
+    }
+  }
+
+  Future<void> _tryAutoStart({
+    required int playersCount,
+    required int readyCount,
+    required int remainSec,
+  }) async {
+    if (_starting) return;
+    if (playersCount < _minPlayersToStart) return;
+
+    final reachedTarget = playersCount >= _targetPlayers;
+    final allReady = readyCount >= playersCount;
+    final timeout = remainSec <= 0;
+    if (!(reachedTarget || allReady || timeout)) return;
+
+    _starting = true;
+    try {
+      await widget.onStart();
+    } finally {
+      _starting = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = _auth.currentUser?.uid ?? '';
+    final roomRef = _db.collection('rooms').doc(widget.roomId);
+    final playersRef = roomRef.collection('players');
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: roomRef.snapshots(),
+      builder: (context, roomSnap) {
+        final roomData = roomSnap.data?.data() ?? <String, dynamic>{};
+        final status = (roomData['status'] ?? 'waiting').toString();
+        final countdownTs =
+            roomData['publicCountdownStartedAt'] as Timestamp?;
+        final elapsed =
+            countdownTs == null
+                ? 0
+                : DateTime.now().difference(countdownTs.toDate()).inSeconds;
+        final remainSec = (_countdownSec - elapsed).clamp(0, _countdownSec);
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: playersRef.snapshots(),
+          builder: (context, playersSnap) {
+            final players =
+                playersSnap.data?.docs ??
+                <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+            final playersCount = players.length;
+
+            if (status == 'waiting') {
+              _syncCountdown(
+                playersCount: playersCount,
+                countdownStartedAt: countdownTs,
+              );
+            }
+
+            final readyCount =
+                players.where((d) => (d.data()['startReady'] ?? false) == true).length;
+            final myReady = players.any(
+              (d) =>
+                  (d.data()['uid'] ?? '').toString() == uid &&
+                  (d.data()['startReady'] ?? false) == true,
+            );
+
+            if (status == 'waiting') {
+              _tryAutoStart(
+                playersCount: playersCount,
+                readyCount: readyCount,
+                remainSec: remainSec,
+              );
+            }
+
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('現在の人数: $playersCount / $_targetPlayers'),
+                  const SizedBox(height: 8),
+                  Text('開始ボタンを押した人数: $readyCount / $playersCount'),
+                  const SizedBox(height: 12),
+                  CupertinoButton.filled(
+                    onPressed: status == 'waiting' ? () => _setReady(!myReady) : null,
+                    child: Text(myReady ? '開始を取り消す' : '開始'),
+                  ),
+                  if (playersCount >= _minPlayersToStart) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'スタートまで: $remainSec 秒',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -885,7 +1097,15 @@ class _PlayPaneState extends State<_PlayPane> {
         if ((q['image'] as String?)?.isNotEmpty == true)
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(q['image'], height: 180, fit: BoxFit.cover),
+            child: SizedBox(
+              height: 180,
+              child: SpotImage(
+                raw: (q['image'] ?? '').toString(),
+                width: 720,
+                cacheWidth: 720,
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
         const SizedBox(height: 8),
         if (!hard)
@@ -904,6 +1124,7 @@ class _PlayPaneState extends State<_PlayPane> {
               markers: {
                 Marker(markerId: MarkerId('m_${widget.round}'), position: pos),
               },
+              mapToolbarEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               compassEnabled: false,
