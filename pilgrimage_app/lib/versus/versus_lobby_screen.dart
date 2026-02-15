@@ -11,7 +11,6 @@ class VersusLobbyScreen extends StatefulWidget {
 
 class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   final s = VersusService();
-  String difficulty = 'normal';
   final codeCtrl = TextEditingController();
   bool _busy = false;
 
@@ -43,7 +42,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final id = await s.quickJoin(difficulty: difficulty);
+      final id = await s.quickJoin();
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/versus/room/$id');
     } catch (e) {
@@ -57,7 +56,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final id = await s.createRoom(isPrivate: true, difficulty: difficulty);
+      final id = await s.createRoom(isPrivate: true);
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/versus/room/$id');
     } catch (e) {
@@ -92,81 +91,95 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: commonAppBar(
-        context,
-        title: '対戦ロビー',
-        currentMode: AppMode.versus,
-      ),
-      child: Container(
-        // ★ 背景画像
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/image_dir/tokyo_tower.jpg'),
-            fit: BoxFit.cover,
+    final media = MediaQuery.of(context);
+    final clampedMedia = media.copyWith(
+      textScaler: media.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.2),
+    );
+
+    final titleStyle = Theme.of(
+      context,
+    ).textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600);
+    const fieldStyle = TextStyle(fontSize: 16, color: Colors.black);
+    const placeholderStyle = TextStyle(
+      fontSize: 15,
+      color: CupertinoColors.systemGrey,
+    );
+
+    return MediaQuery(
+      data: clampedMedia,
+      child: CupertinoPageScaffold(
+        navigationBar: commonAppBar(
+          context,
+          title: '対戦ロビー',
+          currentMode: AppMode.versus,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minSize: 30,
+            onPressed: () {
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                '/mode_selection',
+                (route) => false,
+              );
+            },
+            child: const Icon(CupertinoIcons.back),
           ),
         ),
-        // 背景の上にうっすら白をかぶせて内容を載せる
         child: Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.white.withOpacity(0.85), // 0.7〜0.9くらいで好み調整
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              CupertinoSlidingSegmentedControl<String>(
-                groupValue: difficulty,
-                children: const {
-                  'easy': Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Text('Easy'),
-                  ),
-                  'normal': Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Text('Normal'),
-                  ),
-                  'hard': Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Text('Hard'),
-                  ),
-                },
-                onValueChanged: (v) {
-                  if (v != null) {
-                    setState(() => difficulty = v);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              CupertinoButton.filled(
-                onPressed: _busy ? null : _quickMatch,
-                child: Text(_busy ? '接続中…' : 'クイックマッチ'),
-              ),
-              const Divider(height: 32),
-              Text('プライベートマッチ', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              CupertinoButton(
-                onPressed: _busy ? null : _createPrivate,
-                color: CupertinoColors.systemGrey5,
-                child: const Text('部屋を作る'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: CupertinoTextField(
-                      controller: codeCtrl,
-                      textCapitalization: TextCapitalization.characters,
-                      placeholder: '招待コード6桁',
-                      autocorrect: false,
+          // ★ 背景画像
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/image_dir/tokyo_tower.jpg'),
+              fit: BoxFit.cover,
+            ),
+          ),
+          // 背景の上にうっすら白をかぶせて内容を載せる
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.white.withValues(alpha: 0.85),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CupertinoButton.filled(
+                  onPressed: _busy ? null : _quickMatch,
+                  child: Text(_busy ? '接続中…' : 'クイックマッチ'),
+                ),
+                const Divider(height: 32),
+                Text('プライベートマッチ', style: titleStyle),
+                const SizedBox(height: 8),
+                CupertinoButton(
+                  onPressed: _busy ? null : _createPrivate,
+                  color: CupertinoColors.systemGrey5,
+                  child: const Text('部屋を作る'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: CupertinoTextField(
+                          controller: codeCtrl,
+                          style: fieldStyle,
+                          placeholderStyle: placeholderStyle,
+                          maxLines: 1,
+                          textCapitalization: TextCapitalization.characters,
+                          placeholder: '招待コード6桁',
+                          autocorrect: false,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  CupertinoButton.filled(
-                    onPressed: _busy ? null : _joinByCode,
-                    child: const Text('参加'),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 8),
+                    CupertinoButton.filled(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      minSize: 44,
+                      onPressed: _busy ? null : _joinByCode,
+                      child: const Text('参加'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

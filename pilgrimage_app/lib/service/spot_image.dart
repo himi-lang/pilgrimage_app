@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import './commons_image_service.dart'; // パスはあなたの構成に合わせて変更してOK
 
-class SpotImage extends StatelessWidget {
+class SpotImage extends StatefulWidget {
   static final CommonsImageService _commons = CommonsImageService();
 
   const SpotImage({
@@ -18,6 +18,27 @@ class SpotImage extends StatelessWidget {
   final int width;
   final int? cacheWidth;
   final Widget? placeholder;
+
+  @override
+  State<SpotImage> createState() => _SpotImageState();
+}
+
+class _SpotImageState extends State<SpotImage> {
+  late Future<String?> _urlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlFuture = _getDisplayUrl(widget.raw);
+  }
+
+  @override
+  void didUpdateWidget(covariant SpotImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.raw != widget.raw || oldWidget.width != widget.width) {
+      _urlFuture = _getDisplayUrl(widget.raw);
+    }
+  }
 
   bool _isHttpUrl(String s) {
     final u = Uri.tryParse(s.trim());
@@ -42,7 +63,7 @@ class SpotImage extends StatelessWidget {
     }
 
     // Commons系なら解決を試す
-    final resolved = await _commons.resolveThumbUrl(s, width: width);
+    final resolved = await SpotImage._commons.resolveThumbUrl(s, width: widget.width);
     debugPrint('[SpotImage] resolved: raw="$s" -> "$resolved"');
 
     // 解決できない場合、rawがURLならrawを使う（File名だけ等はnull）
@@ -52,11 +73,11 @@ class SpotImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<String?>(
-      future: _getDisplayUrl(raw),
+      future: _urlFuture,
       builder: (context, snapshot) {
         // 読み込み中
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return placeholder ??
+          return widget.placeholder ??
               const Center(
                 child: SizedBox(
                   width: 20,
@@ -68,14 +89,14 @@ class SpotImage extends StatelessWidget {
 
         final url = snapshot.data;
         if (url == null) {
-          debugPrint('[SpotImage] url is null. raw="$raw"');
+          debugPrint('[SpotImage] url is null. raw="${widget.raw}"');
           return const Icon(Icons.image_not_supported);
         }
 
         return Image.network(
           url,
-          fit: fit,
-          cacheWidth: cacheWidth ?? width,
+          fit: widget.fit,
+          cacheWidth: widget.cacheWidth ?? widget.width,
           headers: const {'User-Agent': 'Mozilla/5.0'},
           errorBuilder: (context, error, stack) {
             debugPrint('[Image.network] url=$url');

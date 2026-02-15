@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 class VersusService {
+  static const int publicMaxPlayers = 5;
+  static const int privateMaxPlayers = 2;
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
@@ -13,7 +15,7 @@ class VersusService {
   // ========= ロビー系 =========
 
   /// クイックマッチ。待機中の公開ルームに入る。無ければ作る。
-  Future<String> quickJoin({String difficulty = 'normal'}) async {
+  Future<String> quickJoin() async {
     final me = uid;
     if (me == null) {
       throw StateError('Not signed in');
@@ -23,7 +25,6 @@ class VersusService {
     // 1) 探す 2) 少し待ってもう一度探す 3) それでも無ければ作る
     for (var attempt = 0; attempt < 4; attempt++) {
       final found = await _findOpenPublicRoom(
-        difficulty: difficulty,
         excludeHostUid: me,
       );
       if (found != null) {
@@ -36,7 +37,6 @@ class VersusService {
       );
 
       final foundAfterWait = await _findOpenPublicRoom(
-        difficulty: difficulty,
         excludeHostUid: me,
       );
       if (foundAfterWait != null) {
@@ -45,12 +45,11 @@ class VersusService {
       }
     }
 
-    final roomId = await _createRoomDoc(isPrivate: false, difficulty: difficulty);
+    final roomId = await _createRoomDoc(isPrivate: false);
     await _joinRoom(roomId);
 
     // 同時作成で分断した場合、他の公開待機ルームへ寄せる
     final candidate = await _findOpenPublicRoom(
-      difficulty: difficulty,
       excludeHostUid: me,
     );
     if (candidate != null && candidate != roomId) {
@@ -66,12 +65,8 @@ class VersusService {
   /// ルームを新規作成（プライベート/公開）
   Future<String> createRoom({
     required bool isPrivate,
-    String difficulty = 'normal',
   }) async {
-    final id = await _createRoomDoc(
-      isPrivate: isPrivate,
-      difficulty: difficulty,
-    );
+    final id = await _createRoomDoc(isPrivate: isPrivate);
     await _joinRoom(id);
     return id;
   }
@@ -304,12 +299,14 @@ class VersusService {
       final data = roomSnap.data() ?? <String, dynamic>{};
       final status = (data['status'] ?? 'waiting').toString();
       final playerCount = (data['playerCount'] ?? 0) as int;
+      final isPrivate = (data['isPrivate'] ?? true) as bool;
       final alreadyJoined = playerSnap.exists;
+      final capacity = isPrivate ? privateMaxPlayers : publicMaxPlayers;
 
       if (enforceCapacity && !alreadyJoined && status != 'waiting') {
         throw StateError('room-closed');
       }
-      if (enforceCapacity && !alreadyJoined && playerCount >= 2) {
+      if (enforceCapacity && !alreadyJoined && playerCount >= capacity) {
         throw StateError('room-full');
       }
 
@@ -340,7 +337,6 @@ class VersusService {
 
   Future<String> _createRoomDoc({
     required bool isPrivate,
-    required String difficulty,
   }) async {
     final u = user!;
     final doc = _db.collection('rooms').doc();
@@ -349,7 +345,6 @@ class VersusService {
     await doc.set({
       'hostUid': u.uid,
       'status': 'waiting',
-      'difficulty': difficulty,
       'round': 0,
       'roundTimeSec': 20,
       'playerCount': 0,
@@ -394,26 +389,44 @@ class VersusService {
   }
 
   Future<String?> _findOpenPublicRoom({
-    required String difficulty,
     required String excludeHostUid,
   }) async {
+    String? pickBest(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+      final candidates = docs.where((d) {
+        final data = d.data();
+        final isPrivate = (data['isPrivate'] ?? true) as bool;
+        final hostUid = (data['hostUid'] ?? '').toString();
+        final playerCount = (data['playerCount'] ?? 0) as int;
+        return !isPrivate &&
+            hostUid != excludeHostUid &&
+            playerCount < publicMaxPlayers;
+      }).toList();
+      if (candidates.isEmpty) return null;
+
+      candidates.sort((a, b) {
+        final da = a.data();
+        final db = b.data();
+        final pa = (da['playerCount'] ?? 0) as int;
+        final pb = (db['playerCount'] ?? 0) as int;
+        if (pa != pb) return pb.compareTo(pa); // 先に埋まりかけを優先
+
+        final ta = (da['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        final tb = (db['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        return ta.compareTo(tb);
+      });
+      return candidates.first.id;
+    }
+
     try {
       final qs =
           await _db
               .collection('rooms')
               .where('isPrivate', isEqualTo: false)
               .where('status', isEqualTo: 'waiting')
-              .where('difficulty', isEqualTo: difficulty)
-              .limit(12)
+              .limit(20)
               .get();
-      for (final d in qs.docs) {
-        final data = d.data();
-        final hostUid = (data['hostUid'] ?? '').toString();
-        final playerCount = (data['playerCount'] ?? 0) as int;
-        if (hostUid == excludeHostUid) continue;
-        if (playerCount >= 2) continue;
-        return d.id;
-      }
+      final best = pickBest(qs.docs);
+      if (best != null) return best;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[VersusService] optimized quickJoin query failed: $e');
@@ -428,20 +441,8 @@ class VersusService {
               .where('status', isEqualTo: 'waiting')
               .limit(30)
               .get();
-
-      for (final d in qs.docs) {
-        final m = d.data();
-        final isPrivate = (m['isPrivate'] ?? true) as bool;
-        final diff = (m['difficulty'] ?? '').toString();
-        final hostUid = (m['hostUid'] ?? '').toString();
-        final playerCount = (m['playerCount'] ?? 0) as int;
-        if (!isPrivate &&
-            diff == difficulty &&
-            hostUid != excludeHostUid &&
-            playerCount < 2) {
-          return d.id;
-        }
-      }
+      final best = pickBest(qs.docs);
+      if (best != null) return best;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[VersusService] fallback quickJoin query failed: $e');

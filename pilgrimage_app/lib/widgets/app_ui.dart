@@ -57,6 +57,7 @@ class ModeSwitchButton extends StatelessWidget {
 ObstructingPreferredSizeWidget commonAppBar(
   BuildContext context, {
   required String title,
+  Widget? leading,
   List<Widget> actionsExtra = const [],
   AppMode? currentMode,
   Future<bool> Function()? modeConfirm,
@@ -74,6 +75,7 @@ ObstructingPreferredSizeWidget commonAppBar(
   ];
 
   return CupertinoNavigationBar(
+    leading: leading,
     middle: Text(title),
     trailing: Row(mainAxisSize: MainAxisSize.min, children: trailingChildren),
   );

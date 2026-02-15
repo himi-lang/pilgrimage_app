@@ -8,8 +8,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../widgets/app_ui.dart';
 import '../service/spot_image.dart';
+import '../mode_selection_screen.dart';
 import 'versus_service.dart';
-import 'versus_lobby_screen.dart';
 
 // ===== 設定 =====
 const bool _MUTE_SNACK = true; // 画面下ログを抑制（true推奨）
@@ -89,12 +89,12 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     return res ?? false;
   }
 
-  // ===== ロビーへ戻る =====
+  // ===== 対戦モード選択へ戻る =====
   Future<void> _goLobby() async {
     await _svc.leaveRoom(widget.roomId);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      CupertinoPageRoute(builder: (_) => const VersusLobbyScreen()),
+      CupertinoPageRoute(builder: (_) => const VersusModeMenuScreen()),
       (_) => false,
     );
   }
@@ -141,7 +141,6 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         ).showSnackBar(const SnackBar(content: Text('問題を読み込み中…')));
       }
       final qs = await _buildQuestions(
-        data['difficulty'] ?? 'normal',
         count: 5,
       );
       if (qs.isEmpty) {
@@ -195,13 +194,10 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         .listen((s) async {
           if (_advancedThisRound) return;
           final docs = s.docs;
-          final anyCorrect = docs.any(
-            (d) => (d.data()['correct'] ?? false) == true,
-          );
           final allAnswered =
               (_playersCount > 0) && (docs.length >= _playersCount);
 
-          if (anyCorrect || allAnswered) {
+          if (allAnswered) {
             _advancedThisRound = true;
             await Future.delayed(const Duration(milliseconds: _REVEAL_HOLD_MS));
             final snap = await roomDoc.get();
@@ -247,7 +243,6 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         final round = (data['round'] ?? 0) as int;
         final List qs = (data['questions'] ?? []) as List;
         final int roundTimeSec = (data['roundTimeSec'] ?? 20) as int;
-        final String difficulty = (data['difficulty'] ?? 'normal') as String;
         final DateTime? roundStartedAt =
             (data['roundStartedAt'] as Timestamp?)?.toDate();
         final DateTime? finishedAt =
@@ -333,11 +328,9 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                         isPrivate: hasCode,
                         isHost: isHost,
                         onRematchStartByHost: (
-                          difficultyHint,
                           countHint,
                         ) async {
                           final qsNew = await _buildQuestions(
-                            difficultyHint ?? difficulty,
                             count: countHint ?? (qs.isNotEmpty ? qs.length : 5),
                           );
                           await _resetPlayersScore();
@@ -354,7 +347,6 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                       total: qs.length,
                       roundTimeSec: roundTimeSec,
                       roundStartedAt: roundStartedAt,
-                      difficulty: difficulty,
                       workPool: workPool,
                       onSubmit: (ans, timeMs, {bool timeUp = false}) async {
                         final target = (qs[round]['workTitle'] ?? '') as String;
@@ -401,7 +393,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
   // ===== 問題生成（作品重複なし） =====
   Future<List<Map<String, dynamic>>> _buildQuestions(
-    String difficulty, {
+    {
     int count = 5,
   }) async {
     final rand = Random();
@@ -547,8 +539,7 @@ class _PublicWaitingPane extends StatefulWidget {
 }
 
 class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
-  static const int _targetPlayers = 4;
-  static const int _minPlayersToStart = 2;
+  static const int _targetPlayers = VersusService.publicMaxPlayers;
   static const int _countdownSec = 30;
 
   final _db = FirebaseFirestore.instance;
@@ -596,17 +587,17 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
         if (status != 'waiting') return;
         final hasCountdown = data['publicCountdownStartedAt'] != null;
 
-        if (playersCount >= _minPlayersToStart && !hasCountdown) {
+        if (playersCount > 0 && !hasCountdown) {
           tx.update(roomRef, {
             'publicCountdownStartedAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           });
-        } else if (playersCount < _minPlayersToStart && hasCountdown) {
+        } else if (playersCount == 0 && hasCountdown) {
           tx.update(roomRef, {
             'publicCountdownStartedAt': FieldValue.delete(),
             'updatedAt': FieldValue.serverTimestamp(),
           });
-        } else if (playersCount >= _minPlayersToStart && countdownStartedAt == null) {
+        } else if (playersCount > 0 && countdownStartedAt == null) {
           tx.update(roomRef, {
             'publicCountdownStartedAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
@@ -626,10 +617,10 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
     required int remainSec,
   }) async {
     if (_starting) return;
-    if (playersCount < _minPlayersToStart) return;
+    if (playersCount <= 0) return;
 
     final reachedTarget = playersCount >= _targetPlayers;
-    final allReady = readyCount >= playersCount;
+    final allReady = playersCount > 0 && readyCount >= playersCount;
     final timeout = remainSec <= 0;
     if (!(reachedTarget || allReady || timeout)) return;
 
@@ -703,13 +694,11 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
                     onPressed: status == 'waiting' ? () => _setReady(!myReady) : null,
                     child: Text(myReady ? '開始を取り消す' : '開始'),
                   ),
-                  if (playersCount >= _minPlayersToStart) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'スタートまで: $remainSec 秒',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                  const SizedBox(height: 12),
+                  Text(
+                    'スタートまで: $remainSec 秒',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
             );
@@ -726,7 +715,7 @@ class _FinishedPane extends StatefulWidget {
   final DateTime? finishedAt;
   final bool isPrivate; // 招待コードあり＝プライベート
   final bool isHost;
-  final Future<void> Function(String? difficultyHint, int? countHint)
+  final Future<void> Function(int? countHint)
   onRematchStartByHost;
   final VoidCallback onGoLobby;
 
@@ -782,7 +771,7 @@ class _FinishedPaneState extends State<_FinishedPane> {
           _players > 0 &&
           _ready >= _players) {
         if (widget.isHost) {
-          await widget.onRematchStartByHost(null, null);
+          await widget.onRematchStartByHost(null);
         }
       }
 
@@ -830,7 +819,7 @@ class _FinishedPaneState extends State<_FinishedPane> {
                       label: Text(
                         widget.isPrivate
                             ? (_voted ? '再戦希望済み' : '再戦（全員で押す）')
-                            : 'ロビーで次の対戦へ',
+                            : '対戦モード選択へ戻る',
                       ),
                     ),
                   ),
@@ -850,13 +839,13 @@ class _FinishedPaneState extends State<_FinishedPane> {
                   Text(
                     widget.isPrivate
                         ? '$_remain s 内に全員が押したら再戦開始'
-                        : '$_remain s 後にロビーへ',
+                        : '$_remain s 後に対戦モード選択へ',
                   ),
                   const Spacer(),
                   OutlinedButton.icon(
                     onPressed: widget.onGoLobby,
                     icon: const Icon(Icons.home_outlined),
-                    label: const Text('ロビーへ'),
+                    label: const Text('対戦モード選択へ'),
                   ),
                 ],
               ),
@@ -902,7 +891,6 @@ class _PlayPane extends StatefulWidget {
   final int total;
   final int roundTimeSec;
   final DateTime? roundStartedAt;
-  final String difficulty; // 'easy'|'normal'|'hard'
   final List<String> workPool;
   final Future<void> Function(String ans, int timeMs, {bool timeUp}) onSubmit;
 
@@ -913,7 +901,6 @@ class _PlayPane extends StatefulWidget {
     required this.total,
     required this.roundTimeSec,
     required this.roundStartedAt,
-    required this.difficulty,
     required this.workPool,
     required this.onSubmit,
   });
@@ -923,7 +910,6 @@ class _PlayPane extends StatefulWidget {
 }
 
 class _PlayPaneState extends State<_PlayPane> {
-  final _ctrl = TextEditingController();
   late Stopwatch _sw;
   bool _submitted = false;
   bool _roundClosed = false;
@@ -934,7 +920,6 @@ class _PlayPaneState extends State<_PlayPane> {
   int? _correctIndex;
   int? _pickedIndex;
   bool _pause = false;
-  bool get _isEasy => widget.difficulty == 'easy';
 
   String? _revealTitle;
   String? _resultText;
@@ -942,14 +927,13 @@ class _PlayPaneState extends State<_PlayPane> {
   StreamSubscription? _answersSub;
   int _playersCount = 0;
   int _answersCount = 0;
-  int _correctCount = 0;
 
   @override
   void initState() {
     super.initState();
     _sw = Stopwatch()..start();
     _listenPlayersCount();
-    _setupForRound(first: true);
+    _setupForRound();
     _listenAnswers();
   }
 
@@ -961,7 +945,6 @@ class _PlayPaneState extends State<_PlayPane> {
       _roundClosed = false;
       _revealTitle = null;
       _resultText = null;
-      _ctrl.clear();
       _sw
         ..reset()
         ..start();
@@ -972,7 +955,6 @@ class _PlayPaneState extends State<_PlayPane> {
 
   @override
   void dispose() {
-    _ctrl.dispose();
     _ticker?.cancel();
     _answersSub?.cancel();
     super.dispose();
@@ -998,18 +980,10 @@ class _PlayPaneState extends State<_PlayPane> {
         .snapshots()
         .listen((s) {
           _answersCount = s.docs.length;
-          _correctCount = s.docs.where((d) => (d['correct'] == true)).length;
-          final anyCorrect = _correctCount > 0;
           final allAnswered =
               (_playersCount > 0) && (_answersCount >= _playersCount);
 
-          if (anyCorrect) {
-            final title = (widget.question['workTitle'] ?? '') as String;
-            setState(() {
-              _roundClosed = true;
-              _revealTitle = title;
-            });
-          } else if (allAnswered && _correctCount == 0) {
+          if (allAnswered) {
             final title = (widget.question['workTitle'] ?? '') as String;
             setState(() {
               _roundClosed = true;
@@ -1019,9 +993,9 @@ class _PlayPaneState extends State<_PlayPane> {
         });
   }
 
-  void _setupForRound({bool first = false}) {
+  void _setupForRound() {
     _setupTimer();
-    if (_isEasy) _prepareChoices();
+    _prepareChoices();
   }
 
   void _setupTimer() {
@@ -1072,9 +1046,6 @@ class _PlayPaneState extends State<_PlayPane> {
     final q = widget.question;
     double _toD(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
     final pos = LatLng(_toD(q['latitude']), _toD(q['longitude']));
-    final hard = widget.difficulty == 'hard';
-    final halfPassed = _remain <= (widget.roundTimeSec ~/ 2);
-    final hint = (q['address'] as String?)?.trim();
 
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -1088,9 +1059,6 @@ class _PlayPaneState extends State<_PlayPane> {
         Row(
           children: [
             Text('残り $_remain s'),
-            const Spacer(),
-            if (hard && halfPassed && (hint?.isNotEmpty ?? false))
-              Text('ヒント: $hint', overflow: TextOverflow.ellipsis),
           ],
         ),
         const SizedBox(height: 8),
@@ -1108,11 +1076,10 @@ class _PlayPaneState extends State<_PlayPane> {
             ),
           ),
         const SizedBox(height: 8),
-        if (!hard)
-          Text(
-            'スポット: ${q['name'] ?? ''}',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+        Text(
+          'スポット: ${q['name'] ?? ''}',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
         const SizedBox(height: 8),
         SizedBox(
           height: 160,
@@ -1133,7 +1100,7 @@ class _PlayPaneState extends State<_PlayPane> {
           ),
         ),
         const SizedBox(height: 12),
-        if (_isEasy) _buildChoicesArea() else _buildTypingArea(),
+        _buildChoicesArea(),
         if (_resultText != null) ...[
           const SizedBox(height: 8),
           Text(
@@ -1221,32 +1188,12 @@ class _PlayPaneState extends State<_PlayPane> {
     if (mounted) setState(() => _pause = false);
   }
 
-  Widget _buildTypingArea() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _ctrl,
-          textInputAction: TextInputAction.send,
-          onSubmitted: (_) => _submit(),
-          enabled: !_submitted && !_roundClosed,
-          decoration: const InputDecoration(hintText: 'アニメ作品名を入力'),
-        ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: (_submitted || _roundClosed) ? null : _submit,
-          child: const Text('回答'),
-        ),
-      ],
-    );
-  }
-
   Future<void> _submit({String? ans, bool timeUp = false}) async {
     if (_roundClosed && !timeUp) return;
     if (_submitted && !timeUp) return;
     if (!timeUp) _submitted = true;
     _sw.stop();
-    final send = ans ?? _ctrl.text.trim();
+    final send = ans ?? '';
     await widget.onSubmit(send, _sw.elapsedMilliseconds, timeUp: timeUp);
     if (!mounted) return;
     if (!_MUTE_SNACK && !timeUp) {

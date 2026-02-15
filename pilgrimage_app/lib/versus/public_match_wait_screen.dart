@@ -21,8 +21,6 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
   final _db = FirebaseFirestore.instance;
   bool _loading = false;
   String? _roomId;
-  bool _navigating = false;
-  DateTime? _joinedAt;
   String? _matchingHint;
   bool _quoteLoading = true;
   String _animeTitle = '読み込み中...';
@@ -30,9 +28,7 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
   int _dotCount = 1;
   bool _showBack = false;
   Timer? _dotTimer;
-  Timer? _retryTimer;
   late final AnimationController _flipController;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _playersSub;
 
   @override
   void initState() {
@@ -44,14 +40,11 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
     _startDotAnimation();
     _loadRandomQuote();
     _startMatching();
-    _startRetryLoop();
   }
 
   @override
   void dispose() {
-    _playersSub?.cancel();
     _dotTimer?.cancel();
-    _retryTimer?.cancel();
     _flipController.dispose();
     super.dispose();
   }
@@ -133,42 +126,14 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
     setState(() => _loading = true);
 
     try {
-      final roomId = await _service.quickJoin(difficulty: 'normal');
+      final roomId = await _service.quickJoin();
       if (!mounted) return;
       setState(() {
         _roomId = roomId;
-        _joinedAt = DateTime.now();
         _matchingHint = null;
         _loading = false;
       });
-
-      _playersSub?.cancel();
-      _playersSub = FirebaseFirestore.instance
-          .collection('rooms')
-          .doc(roomId)
-          .collection('players')
-          .snapshots()
-          .listen((snap) {
-            if (!mounted || _navigating) return;
-            final uniqueUids =
-                snap.docs
-                    .map((d) => (d.data()['uid'] ?? '').toString())
-                    .where((e) => e.isNotEmpty)
-                    .toSet()
-                    .length;
-
-            if (uniqueUids >= 2) {
-              _navigating = true;
-              Navigator.of(context).pushReplacementNamed('/versus/room/$roomId');
-              return;
-            }
-
-            if (snap.docs.length >= 2 && uniqueUids < 2) {
-              setState(() {
-                _matchingHint = '同じアカウント同士ではマッチングできません。別アカウントで参加してください。';
-              });
-            }
-          });
+      Navigator.of(context).pushReplacementNamed('/versus/room/$roomId');
     } catch (e) {
       debugPrint('[PublicMatchWait] matching failed: $e');
       if (!mounted) return;
@@ -188,45 +153,6 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
             ),
       );
     }
-  }
-
-  void _startRetryLoop() {
-    _retryTimer = Timer.periodic(const Duration(seconds: 8), (_) async {
-      if (!mounted || _loading || _navigating) return;
-      final roomId = _roomId;
-      final joinedAt = _joinedAt;
-      if (roomId == null || joinedAt == null) return;
-
-      // ルーム分断レース対策: 一人待機が続いたら再マッチング
-      if (DateTime.now().difference(joinedAt).inSeconds < 12) return;
-
-      try {
-        final snap =
-            await _db
-                .collection('rooms')
-                .doc(roomId)
-                .collection('players')
-                .get();
-        final uniqueUids =
-            snap.docs
-                .map((d) => (d.data()['uid'] ?? '').toString())
-                .where((e) => e.isNotEmpty)
-                .toSet()
-                .length;
-        if (uniqueUids <= 1) {
-          await _service.leaveRoom(roomId);
-          if (!mounted) return;
-          setState(() {
-            _roomId = null;
-            _joinedAt = null;
-            _matchingHint = null;
-          });
-          await _startMatching();
-        }
-      } catch (e) {
-        debugPrint('[PublicMatchWait] retry loop error: $e');
-      }
-    });
   }
 
   Future<void> _cancelMatch() async {
