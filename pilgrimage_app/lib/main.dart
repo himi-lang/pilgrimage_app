@@ -38,16 +38,23 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Anime Atlas',
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(boldText: false),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       theme: ThemeData(
         platform: TargetPlatform.iOS,
         useMaterial3: false,
         colorScheme: const ColorScheme.light(
-          primary: CupertinoColors.activeBlue,
+          primary: Color.fromARGB(255,30,69,110),
           secondary: CupertinoColors.activeGreen,
-          surface: CupertinoColors.systemBackground,
-          onSurface: CupertinoColors.black,
+          surface: Color.fromARGB(255,30,69,110),
+          onSurface: CupertinoColors.white,
         ),
-        scaffoldBackgroundColor: CupertinoColors.systemGroupedBackground,
+        scaffoldBackgroundColor: const Color(0xFFF7F6F2),
         textTheme: ThemeData.light().textTheme.apply(
               bodyColor: CupertinoColors.black,
               displayColor: CupertinoColors.black,
@@ -93,6 +100,7 @@ class MyApp extends StatelessWidget {
       },
 
       // /versus/room/{roomId} だけ特別扱い
+      //対戦roomは毎回番号が違うので可変する。
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
         if (name.startsWith('/versus/room/')) {

@@ -32,7 +32,13 @@ class TermsScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         '内容の読み込みに失敗しました。\n\n${snapshot.error}',
-                        style: const TextStyle(fontSize: 14, height: 1.4),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.4,
+                          color: CupertinoColors.black,
+                          decoration: TextDecoration.none,
+                          decorationColor: CupertinoColors.transparent,
+                        ),
                       ),
                     );
                   }
@@ -42,7 +48,13 @@ class TermsScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         text,
-                        style: const TextStyle(fontSize: 14, height: 1.5),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: CupertinoColors.black,
+                          decoration: TextDecoration.none,
+                          decorationColor: CupertinoColors.transparent,
+                        ),
                       ),
                     ),
                   );
@@ -79,6 +91,7 @@ class TermsScreen extends StatelessWidget {
                       onPressed: () async {
                         // フラグ保存
                         await TermsService.acceptCurrentTerms();
+                        if (!context.mounted) return;
                         // 呼び出し元に true を返して閉じる
                         Navigator.of(context).pop(true);
                       },

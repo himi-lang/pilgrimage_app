@@ -889,7 +889,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       position: LatLng(d.latitude, d.longitude),
                       infoWindow: InfoWindow(
                         title: d.name,
-                        snippet: [
+                        snippet: 
+                        [
                           d.workTitle,
                           d.address,
                         ].where((e) => e.isNotEmpty).join(' / '),

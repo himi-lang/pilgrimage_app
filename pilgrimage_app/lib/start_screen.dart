@@ -38,7 +38,7 @@ class _StartScreenState extends State<StartScreen> {
     _isProcessing = true;
 
     // ① 効果音
-    _player.play(AssetSource('music_dir/tear_drop.mp3')); //音源
+    _player.play(AssetSource('music_dir/yajuu_aaa.mp3')); //音源
 
     // ② フェードアウト開始
     setState(() {
@@ -96,7 +96,7 @@ class _StartScreenState extends State<StartScreen> {
             fit: StackFit.expand,
             children: [
               // 背景画像
-              Image.asset('assets/image_dir/test1.jpg', fit: BoxFit.cover),
+              Image.asset('assets/image_dir/long_hair.jpg', fit: BoxFit.cover),
               // うっすら暗くするレイヤー
               Container(color: Colors.black.withOpacity(0.25)),
               // 「タップしてスタート」の帯

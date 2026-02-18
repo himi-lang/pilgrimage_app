@@ -12,7 +12,8 @@ class ImageSearchScreen extends StatefulWidget {
   State<ImageSearchScreen> createState() => _ImageSearchScreenState();
 }
 
-class _ImageSearchScreenState extends State<ImageSearchScreen> {
+class _ImageSearchScreenState extends State<ImageSearchScreen> 
+{
   String _query = '';
   bool _isGrid = true;
 
@@ -25,7 +26,8 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
         context,
         title: '画像検索モード',
         currentMode: AppMode.map,
-        actionsExtra: [
+        actionsExtra: 
+        [
           //IconButton(
           //  tooltip: _isGrid ? 'リスト表示' : 'グリッド表示',
           //  icon: Icon(_isGrid ? Icons.view_agenda : Icons.grid_view),

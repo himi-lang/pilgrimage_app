@@ -14,31 +14,44 @@ class ModeSelectionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    Widget card({
+    Widget card//のちのち使うcardっていうwidgetのひな形を作成。
+    (
+      {
       required IconData icon,
       required String title,
       required String subtitle,
       required VoidCallback onTap,
-    }) {
-      return InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
+      }
+    ) 
+    
+    {
+      return InkWell//widgetで、タップできるように。タップ時のリップルも出してくれる。
+      (
+        onTap: onTap,//インスタンスを作成するときに指定する。
+        child: Container
+        (//タッチできる箱を作る。
+          padding: const EdgeInsets.all(20),//paddingを左右上下に20px
+          decoration: BoxDecoration
+          (
             borderRadius: BorderRadius.circular(16),
-            color: cs.surfaceContainer,
+            color: cs.surface,
           ),
-          child: Row(
-            children: [
-              Icon(icon, size: 40),
+          child: Row//横向きにwidgetを配置していく。
+          (
+            children: 
+            [
+              Icon(icon, size: 40,),
               const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+              Expanded
+              (
+                child: Column
+                (
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  children: 
+                  [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: CupertinoColors.white)),
                     const SizedBox(height: 4),
-                    Text(subtitle),
+                    Text(subtitle,style: TextStyle(color: CupertinoColors.white),),
                   ],
                 ),
               ),
@@ -49,13 +62,18 @@ class ModeSelectionScreen extends StatelessWidget {
       );
     }
 
-    return CupertinoPageScaffold(
+    //ここから画面の形を作っていく。widget buildに返す。
+    return CupertinoPageScaffold
+    (
       navigationBar: CupertinoNavigationBar(
-        middle: Text('Anime Atlas'),
+        automaticallyImplyLeading: false,
+        middle: Text('Anime Atlas',style: TextStyle(color: CupertinoColors.white),),
+        backgroundColor: Color.fromARGB(255,30,69,110),
+        automaticBackgroundVisibility: false,
         trailing: AppMenuButton(),
       ),
       child: Material(
-        color: Colors.transparent,
+        color: Colors.white,
         child: Column(
           children: [
             Expanded(
@@ -68,7 +86,7 @@ class ModeSelectionScreen extends StatelessWidget {
                       icon: Icons.map,
                       title: '聖地マップモード',
                       subtitle: '地図で探す・作品から探す',
-                      onTap: () {
+                      onTap: () {//on_clickedと同じ
                         Navigator.of(context).push(
                           CupertinoPageRoute(
                             builder: (_) => const MapModeMenuScreen(),
