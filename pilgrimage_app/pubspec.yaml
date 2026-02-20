@@ -34,9 +34,12 @@ dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
+  
   image_path: "assets/image_dir/app_icon.png"
-  adaptive_icon_background: "assets/image_dir/Layer_back.png"
-  adaptive_icon_foreground: "assets/image_dir/Layer_front.png"
+
+  #image_path_ios: ""
+  adaptive_icon_background: "assets/image_dir/Layer_back2.png"
+  adaptive_icon_foreground: "assets/image_dir/Layer_front2.png"
   remove_alpha_ios: true
 
 

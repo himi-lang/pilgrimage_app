@@ -153,7 +153,11 @@ class _LoginScreenState extends State<LoginScreen> {
     return MediaQuery(
       data: clampedMedia,
       child: CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(middle: Text(title)),
+        navigationBar: CupertinoNavigationBar(
+          middle: Text(title, style: const TextStyle(color: CupertinoColors.white)),
+          backgroundColor: CupertinoTheme.of(context).primaryColor,
+          automaticBackgroundVisibility: false,
+        ),
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(

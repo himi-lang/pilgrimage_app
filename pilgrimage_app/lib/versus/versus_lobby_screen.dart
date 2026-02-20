@@ -112,16 +112,13 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
           context,
           title: '対戦ロビー',
           currentMode: AppMode.versus,
-          leading: CupertinoButton(
-            padding: EdgeInsets.zero,
-            minSize: 30,
+          leading: AppBackButton(
             onPressed: () {
               Navigator.of(context).pushNamedAndRemoveUntil(
                 '/mode_selection',
                 (route) => false,
               );
             },
-            child: const Icon(CupertinoIcons.back),
           ),
         ),
         child: Container(

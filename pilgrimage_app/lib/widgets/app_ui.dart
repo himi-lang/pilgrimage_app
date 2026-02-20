@@ -11,14 +11,33 @@ import '../mode_selection_screen.dart';
 
 enum AppMode { map, versus }
 
-class ModeSwitchButton extends StatelessWidget {
+class AppBackButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  const AppBackButton({super.key, this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minSize: 30,
+      onPressed: onPressed ?? () => Navigator.of(context).maybePop(),
+      child: const Icon(
+        CupertinoIcons.back,
+        color: CupertinoColors.white,
+      ),
+    );
+  }
+}
+
+class ModeSwitchButton extends StatelessWidget { //appBarにある、押すと最初のマップor対戦モード選択に戻る。
   // AppMode は互換性のため残しておくだけで、今回の挙動では使わない
   final AppMode currentMode;
   // ルーム離脱時の確認・後処理はそのまま使えるように残しておく
   final Future<bool> Function()? confirm;
   final Future<void> Function()? beforeNavigate;
 
-  const ModeSwitchButton({
+  const ModeSwitchButton
+  ({
     super.key,
     required this.currentMode,
     this.confirm,
@@ -26,11 +45,13 @@ class ModeSwitchButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
+  Widget build(BuildContext context) 
+  {
+    return CupertinoButton
+    (
       padding: EdgeInsets.zero,
       minSize: 30,
-      child: const Icon(CupertinoIcons.square_grid_2x2),
+      child: const Icon(CupertinoIcons.square_grid_2x2,color: CupertinoColors.white,),
       onPressed: () async {
         // ルームから出るときの確認をしたい画面では、これまで通り confirm/beforeNavigate が使える
         if (confirm != null) {
@@ -44,7 +65,8 @@ class ModeSwitchButton extends StatelessWidget {
         if (!context.mounted) return;
 
         // ★ モード選択画面に戻る
-        Navigator.of(context).pushAndRemoveUntil(
+        Navigator.of(context).pushAndRemoveUntil
+        (
           CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
           (route) => false, // それ以前の画面スタックを全部クリア
         );
@@ -54,7 +76,8 @@ class ModeSwitchButton extends StatelessWidget {
 }
 
 /// 共通AppBar（右端：モード切替 → 追加actions → ログアウト）
-ObstructingPreferredSizeWidget commonAppBar(
+ObstructingPreferredSizeWidget commonAppBar
+(
   BuildContext context, {
   required String title,
   Widget? leading,
@@ -63,9 +86,15 @@ ObstructingPreferredSizeWidget commonAppBar(
   Future<bool> Function()? modeConfirm,
   Future<void> Function()? modeBeforeNavigate,
 }) {
-  final trailingChildren = <Widget>[
+  final resolvedLeading =
+      leading ??
+      (Navigator.of(context).canPop() ? const AppBackButton() : null);
+
+  final trailingChildren = <Widget>
+  [
     if (currentMode != null)
-      ModeSwitchButton(
+      ModeSwitchButton
+      (
         currentMode: currentMode,
         confirm: modeConfirm,
         beforeNavigate: modeBeforeNavigate,
@@ -74,23 +103,29 @@ ObstructingPreferredSizeWidget commonAppBar(
     const AppMenuButton(),
   ];
 
-  return CupertinoNavigationBar(
-    leading: leading,
-    middle: Text(title),
+  return CupertinoNavigationBar
+  (
+    automaticallyImplyLeading: false,
+    leading: resolvedLeading,
+    middle: Text(title, style: const TextStyle(color: CupertinoColors.white)),
+    backgroundColor: Theme.of(context).colorScheme.primary,
+    automaticBackgroundVisibility: false,
     trailing: Row(mainAxisSize: MainAxisSize.min, children: trailingChildren),
   );
 }
 
 /// 共通ハンバーガーメニュー
-class AppMenuButton extends StatelessWidget {
+class AppMenuButton extends StatelessWidget {//AppBarのハンバーガーメニュー
   const AppMenuButton({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
+  Widget build(BuildContext context) 
+  {
+    return CupertinoButton
+    (
       padding: EdgeInsets.zero,
       minSize: 30,
-      child: const Icon(CupertinoIcons.line_horizontal_3),
+      child: const Icon(CupertinoIcons.line_horizontal_3,color: CupertinoColors.white,),
       onPressed: () => _openAppMenu(context),
     );
   }
@@ -101,7 +136,8 @@ const _appVersion = '1.0.0+1'; //ここでアプリのバージョンを変更�
 //ここはハンバーガーメニューの中身の記述
 void _openAppMenu(BuildContext outerContext) {
   //outerは画面側のcontext
-  showModalBottomSheet(
+  showModalBottomSheet
+  (
     context: outerContext,
     useSafeArea: true,
     isScrollControlled: true, // ★ 追加：シートを大きくできるようにする
@@ -296,6 +332,7 @@ ListTile _policyTile(
         body = placeholder ?? '';
       }
 
+      if (!context.mounted) return;
       _openInfoPage(context, title: title, body: body);
     },
   );
@@ -318,7 +355,13 @@ class _InfoPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(middle: Text(title)),
+      navigationBar: CupertinoNavigationBar(
+        automaticallyImplyLeading: false,
+        leading: Navigator.of(context).canPop() ? const AppBackButton() : null,
+        middle: Text(title, style: const TextStyle(color: CupertinoColors.white)),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        automaticBackgroundVisibility: false,
+      ),
       child: SafeArea(
         child: CupertinoScrollbar(
           child: SingleChildScrollView(

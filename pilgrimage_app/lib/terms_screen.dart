@@ -12,8 +12,13 @@ class TermsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('利用規約'),
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text(
+          '利用規約',
+          style: TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        automaticBackgroundVisibility: false,
         automaticallyImplyLeading: false,
       ),
       child: SafeArea(

@@ -70,12 +70,15 @@ class MyApp extends StatelessWidget {
             TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
           },
         ),
-        cupertinoOverrideTheme: const CupertinoThemeData(
-          primaryColor: CupertinoColors.activeBlue,
+        cupertinoOverrideTheme: const CupertinoThemeData
+        (
+          primaryColor: CupertinoColors.systemBlue,
           scaffoldBackgroundColor: CupertinoColors.systemGroupedBackground,
           barBackgroundColor: CupertinoColors.systemGrey6,
-          textTheme: CupertinoTextThemeData(
-            textStyle: TextStyle(
+          textTheme: CupertinoTextThemeData
+          (
+            textStyle: TextStyle
+            (
               color: CupertinoColors.black,
               decoration: TextDecoration.none,
               decorationColor: CupertinoColors.transparent,

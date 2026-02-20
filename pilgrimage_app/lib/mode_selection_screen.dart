@@ -40,7 +40,7 @@ class ModeSelectionScreen extends StatelessWidget {
           (
             children: 
             [
-              Icon(icon, size: 40,),
+              Icon(icon, size: 40,color: CupertinoColors.white,),
               const SizedBox(width: 16),
               Expanded
               (
@@ -55,7 +55,7 @@ class ModeSelectionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(CupertinoIcons.chevron_right),
+              const Icon(CupertinoIcons.chevron_right,color: CupertinoColors.white,),
             ],
           ),
         ),
@@ -68,7 +68,7 @@ class ModeSelectionScreen extends StatelessWidget {
       navigationBar: CupertinoNavigationBar(
         automaticallyImplyLeading: false,
         middle: Text('Anime Atlas',style: TextStyle(color: CupertinoColors.white),),
-        backgroundColor: Color.fromARGB(255,30,69,110),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         automaticBackgroundVisibility: false,
         trailing: AppMenuButton(),
       ),
@@ -121,69 +121,111 @@ class ModeSelectionScreen extends StatelessWidget {
 }
 
 /// マップモード内のサブメニュー
-class MapModeMenuScreen extends StatelessWidget {
+class MapModeMenuScreen extends StatelessWidget { //聖地マップモード選択画面
   const MapModeMenuScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) 
+  {
     final cs = Theme.of(context).colorScheme;
 
-    Widget card({
+    Widget card //表示するボタンの中身をここで設定する。のちにこれに入れてボタンを作成する。
+    ({
       required IconData icon,
       required String title,
       required String subtitle,
       required VoidCallback onTap,
-    }) {
-      return InkWell(
+    }) 
+    {
+      return InkWell
+      (
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
+        child: Container
+        (
+          padding: const EdgeInsets.all(20),//左右上下に20pxのpaddingを用意
+          decoration: BoxDecoration
+          (
             borderRadius: BorderRadius.circular(16),
             color: cs.surfaceContainer,
           ),
-          child: Row(
-            children: [
-              Icon(icon, size: 40),
+          child: Row
+          (
+            children: 
+            [
+              Icon(icon, size: 40,color: CupertinoColors.white),
               const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+              Expanded
+              (
+                child: Column
+                (
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  children: 
+                  [
+                    Text
+                    (
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(color: CupertinoColors.white)
+                    ),
                     const SizedBox(height: 4),
-                    Text(subtitle),
+                    Text(subtitle,style: TextStyle(color: CupertinoColors.white),),
                   ],
                 ),
               ),
-              const Icon(CupertinoIcons.chevron_right),
+              const Icon(CupertinoIcons.chevron_right,color: CupertinoColors.white,),
             ],
           ),
         ),
       );
     }
 
-    return CupertinoPageScaffold(
-      navigationBar: commonAppBar(
-        context,
-        title: '聖地マップモード',
-        currentMode: AppMode.map,
+    return CupertinoPageScaffold //聖地マップモードの選択画面の本体。
+    (
+      navigationBar: CupertinoNavigationBar
+      (
+        automaticallyImplyLeading: false,
+        leading: const AppBackButton(),//純正の戻るボタンに白色つけたらバグがあった。詳細はapp=ui.dartに記載されている。
+        middle: const Text
+        (
+          '聖地マップモード',
+          style: TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        automaticBackgroundVisibility: false,
+        trailing: const Row
+        (
+          mainAxisSize: MainAxisSize.min,
+          children: 
+          [
+            ModeSwitchButton(currentMode: AppMode.map),
+            AppMenuButton(),
+          ],
+        ),
       ),
-      child: Material(
+      child: Material //ここからappBarから下の箱
+      (
         color: Colors.transparent,
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
+        child: Column
+        (
+          children: 
+          [
+            Expanded
+            (
+              child: Padding
+              (
                 padding: const EdgeInsets.all(16),
-                child: ListView(
-                  children: [
-                    card(
+                child: ListView //スクロール可能なバー
+                (
+                  children: 
+                  [
+                    card
+                    (
                       icon: Icons.map_outlined,
                       title: '地図から探す',
                       subtitle: '地図からスポットを発見・検索',
-                      onTap: () {
-                        Navigator.of(context).push(
+                      onTap: () 
+                      {
+                        Navigator.of(context).push
+                        (
                           CupertinoPageRoute(builder: (_) => const MapScreen()),
                         );
                       },
@@ -216,38 +258,50 @@ class MapModeMenuScreen extends StatelessWidget {
 /// 対戦モード内のサブメニュー
 /// ボタン1: プライベート対戦
 /// ボタン2: みんなと対戦
-class VersusModeMenuScreen extends StatelessWidget {
+class VersusModeMenuScreen extends StatelessWidget { //対戦モードの画面を作成している。
   const VersusModeMenuScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) 
+  {
     final cs = Theme.of(context).colorScheme;
 
-    Widget card({
+    Widget card
+    ({
       required IconData icon,
       required String title,
       required String subtitle,
       required VoidCallback onTap,
     }) {
-      return InkWell(
+      return InkWell
+      (
         onTap: onTap,
-        child: Container(
+
+        child: Container //装飾可能で押せる箱を作成する。
+        (
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
+          decoration: BoxDecoration
+          (
             borderRadius: BorderRadius.circular(16),
             color: cs.surfaceContainer,
           ),
-          child: Row(
-            children: [
-              Icon(icon, size: 40),
+
+          child: Row //横軸に子供を並べる。
+          (
+            children: //複数の子を並べられる。
+            [
+              Icon(icon, size: 40,color: CupertinoColors.white,),
               const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+              Expanded
+              (
+                child: Column
+                (
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                  children: 
+                  [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: CupertinoColors.white)),
                     const SizedBox(height: 4),
-                    Text(subtitle),
+                    Text(subtitle,style: TextStyle(color: CupertinoColors.white),),
                   ],
                 ),
               ),

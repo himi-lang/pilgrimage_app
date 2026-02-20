@@ -709,6 +709,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // --- AppBar（検索ボックス付き） ---
   ObstructingPreferredSizeWidget _buildAppBar() {
     return CupertinoNavigationBar(
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      automaticBackgroundVisibility: false,
       middle: SizedBox(
         width: double.infinity,
         child: CupertinoSearchTextField(
