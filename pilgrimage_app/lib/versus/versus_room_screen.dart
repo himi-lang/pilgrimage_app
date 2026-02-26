@@ -35,6 +35,8 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   // 自動進行監視
   StreamSubscription? _autoAnsSub;
   StreamSubscription? _autoPlayersSub;
+  Timer? _presenceTimer;
+  bool _presenceSyncing = false;
   int _playersCount = 0;
   int? _watchingRound;
   bool _advancedThisRound = false;
@@ -46,12 +48,14 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   void initState() {
     super.initState();
     _loadGlobalWorkPool();
+    _startPresenceHeartbeat();
   }
 
   @override
   void dispose() {
     _autoAnsSub?.cancel();
     _autoPlayersSub?.cancel();
+    _presenceTimer?.cancel();
     super.dispose();
   }
 
@@ -63,6 +67,26 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
             ws.docs.map((d) => d.id).whereType<String>().toList();
       });
     } catch (_) {}
+  }
+
+  void _startPresenceHeartbeat() {
+    _syncPresence();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      _syncPresence();
+    });
+  }
+
+  Future<void> _syncPresence() async {
+    if (_presenceSyncing) return;
+    _presenceSyncing = true;
+    try {
+      await _svc.touchPresence(widget.roomId);
+      await _svc.pruneStalePlayers(widget.roomId);
+    } catch (_) {
+      // no-op
+    } finally {
+      _presenceSyncing = false;
+    }
   }
 
   Future<bool> _confirmLeaveRoom(BuildContext context) async {
@@ -360,7 +384,8 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                           correct: correct,
                         );
 
-                        if (isHost && (timeUp || correct)) {
+                        // 先に正解しただけでは進めず、時間切れ時のみホストが遷移を確定する。
+                        if (isHost && timeUp) {
                           await Future.delayed(
                             const Duration(milliseconds: _REVEAL_HOLD_MS),
                           );

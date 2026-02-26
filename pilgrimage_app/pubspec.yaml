@@ -39,7 +39,7 @@ flutter_launcher_icons:
 
   #image_path_ios: ""
   adaptive_icon_background: "assets/image_dir/Layer_back2.png"
-  adaptive_icon_foreground: "assets/image_dir/Layer_front2.png"
+  adaptive_icon_foreground: "assets/image_dir/Layer_front.png"
   remove_alpha_ios: true
 
 

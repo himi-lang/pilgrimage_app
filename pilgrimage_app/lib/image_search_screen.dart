@@ -12,8 +12,7 @@ class ImageSearchScreen extends StatefulWidget {
   State<ImageSearchScreen> createState() => _ImageSearchScreenState();
 }
 
-class _ImageSearchScreenState extends State<ImageSearchScreen> 
-{
+class _ImageSearchScreenState extends State<ImageSearchScreen> {
   String _query = '';
   bool _isGrid = true;
 
@@ -26,8 +25,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen>
         context,
         title: '画像検索モード',
         currentMode: AppMode.map,
-        actionsExtra: 
-        [
+        actionsExtra: [
           //IconButton(
           //  tooltip: _isGrid ? 'リスト表示' : 'グリッド表示',
           //  icon: Icon(_isGrid ? Icons.view_agenda : Icons.grid_view),
@@ -50,7 +48,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen>
                         setState(() => _query = value.trim().toLowerCase()),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 20),
             Expanded(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream:
@@ -59,63 +57,63 @@ class _ImageSearchScreenState extends State<ImageSearchScreen>
                         .orderBy(FieldPath.documentId)
                         .snapshots(),
                 builder: (context, snap) {
-                if (snap.hasError) {
-                  return Center(
-                    child: Text(
-                      '作品一覧の取得に失敗しました\n${snap.error}',
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                }
-                if (!snap.hasData) {
-                  return const Center(child: CupertinoActivityIndicator());
-                }
+                  if (snap.hasError) {
+                    return Center(
+                      child: Text(
+                        '作品一覧の取得に失敗しました\n${snap.error}',
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+                  if (!snap.hasData) {
+                    return const Center(child: CupertinoActivityIndicator());
+                  }
 
-                final docs = snap.data!.docs;
+                  final docs = snap.data!.docs;
 
-                // ★ 作品名（doc.id）でフィルタ
-                final filtered =
-                    _query.isEmpty
-                        ? docs
-                        : docs.where((d) {
-                          final title = d.id.toLowerCase();
-                          return title.contains(_query);
-                        }).toList();
+                  // ★ 作品名（doc.id）でフィルタ
+                  final filtered =
+                      _query.isEmpty
+                          ? docs
+                          : docs.where((d) {
+                            final title = d.id.toLowerCase();
+                            return title.contains(_query);
+                          }).toList();
 
-                if (filtered.isEmpty) {
-                  return const Center(child: Text('該当する作品がありません'));
-                }
+                  if (filtered.isEmpty) {
+                    return const Center(child: Text('該当する作品がありません'));
+                  }
 
-                if (_isGrid) {
-                  return GridView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.68,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                        ),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      return _buildCard(context, filtered[index], cs);
-                    },
-                  );
-                } else {
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      return _buildCard(context, filtered[index], cs);
-                    },
-                  );
-                }
+                  if (_isGrid) {
+                    return GridView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.68,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        return _buildCard(context, filtered[index], cs);
+                      },
+                    );
+                  } else {
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        return _buildCard(context, filtered[index], cs);
+                      },
+                    );
+                  }
                 },
               ),
             ),
@@ -138,7 +136,9 @@ class _ImageSearchScreenState extends State<ImageSearchScreen>
       onTap: () {
         // ★ 画像タップ → MapScreen へ
         Navigator.of(context).push(
-          CupertinoPageRoute(builder: (_) => MapScreen(initialWorkTitle: title)),
+          CupertinoPageRoute(
+            builder: (_) => MapScreen(initialWorkTitle: title),
+          ),
         );
       },
       child: Card(
@@ -152,7 +152,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen>
               child:
                   imageUrl.isEmpty
                       ? const Center(child: Icon(Icons.image_not_supported))
-                  : Image.network(
+                      : Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
                         cacheWidth: 420,
@@ -169,7 +169,9 @@ class _ImageSearchScreenState extends State<ImageSearchScreen>
                 title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                )?.copyWith(color: CupertinoColors.white),
               ),
             ),
           ],

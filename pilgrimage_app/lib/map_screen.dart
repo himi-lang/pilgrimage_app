@@ -62,6 +62,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   List<LocationData> _all = [];
   final CommonsImageService _commonsImageService = CommonsImageService();
   final Map<String, Future<List<String>>> _imageCandidatesCache = {};
+  final Map<String, String> _resolvedCommonsThumbCache = {};
+  final Set<String> _commonsResolveRequested = {};
 
   // after-buildを1回だけ走らせる
   bool _onceAfterBuildRan = false;
@@ -485,22 +487,40 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     return out.where(_isValidImageUrl).toList(growable: false);
   }
 
-  Future<List<String>> _resolveImageCandidates(String raw) async {
+  Future<List<String>> _resolveImageCandidates(String raw) {
     final direct = _imageUrlCandidates(raw);
-    String? resolved;
-    if (_commonsImageService.isCommonsCandidate(raw)) {
-      resolved = await _commonsImageService.resolveThumbUrl(raw, width: 960);
-    }
-
+    final key = raw.trim();
     final all = <String>[];
     final seen = <String>{};
+    void addUrl(String? u) {
+      if (u == null) return;
+      if (_isValidImageUrl(u) && seen.add(u)) all.add(u);
+    }
+
+    final quickCommons = _commonsImageService.quickThumbUrl(raw, width: 960);
+    addUrl(quickCommons);
+
     for (final u in direct) {
-      if (seen.add(u)) all.add(u);
+      addUrl(u);
     }
-    if (resolved != null && _isValidImageUrl(resolved) && seen.add(resolved)) {
-      all.add(resolved);
+    addUrl(_resolvedCommonsThumbCache[key]);
+
+    // UIを待たせないため、確定URLの解決は裏で実行して次回以降に効かせる
+    if (quickCommons != null &&
+        !_resolvedCommonsThumbCache.containsKey(key) &&
+        _commonsResolveRequested.add(key)) {
+      unawaited(
+        _commonsImageService.resolveThumbUrl(raw, width: 960).then((resolved) {
+          if (!mounted || resolved == null || resolved.isEmpty) return;
+          if (_resolvedCommonsThumbCache[key] == resolved) return;
+          _resolvedCommonsThumbCache[key] = resolved;
+          _imageCandidatesCache.remove(key);
+          if (mounted) setState(() {});
+        }).catchError((_) {}),
+      );
     }
-    return all;
+
+    return Future.value(all);
   }
 
   Future<List<String>> _resolveImageCandidatesCached(String raw) {
@@ -945,8 +965,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     CameraUpdate.newCameraPosition(_initialCamera),
                   );
                   await Future.delayed(const Duration(milliseconds: 120));
-                  // ここでの _applyResumeOrStart 呼び出しは
-                  // 上の after-build 側でまとめて行うので不要
+                  // マップ作成完了後にも初期処理を走らせる。
+                  // after-build が先に動いて _mapReady=false だった場合の取りこぼしを防ぐ。
+                  await _applyResumeOrStart();
                 },
                 cameraTargetBounds: CameraTargetBounds.unbounded,
                 myLocationEnabled: true,

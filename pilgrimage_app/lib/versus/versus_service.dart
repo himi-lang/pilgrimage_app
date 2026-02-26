@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 class VersusService {
   static const int publicMaxPlayers = 5;
   static const int privateMaxPlayers = 2;
+  static const Duration stalePresenceTtl = Duration(seconds: 45);
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
@@ -82,8 +83,13 @@ class VersusService {
             .get();
     if (qs.docs.isEmpty) return null;
     final id = qs.docs.first.id;
-    await _joinRoom(id, enforceCapacity: true);
-    return id;
+    try {
+      await pruneStalePlayers(id);
+      await _joinRoom(id, enforceCapacity: true);
+      return id;
+    } on StateError {
+      return null;
+    }
   }
 
   /// ルームから退出
@@ -117,6 +123,90 @@ class VersusService {
       };
       tx.update(roomRef, patch);
     });
+  }
+
+  Future<void> touchPresence(String roomId) async {
+    final u = uid;
+    if (u == null) return;
+    try {
+      await _db
+          .collection('rooms')
+          .doc(roomId)
+          .collection('players')
+          .doc(u)
+          .update({'lastActiveAt': FieldValue.serverTimestamp()});
+    } catch (_) {
+      // no-op
+    }
+  }
+
+  Future<void> pruneStalePlayers(
+    String roomId, {
+    Duration staleAfter = stalePresenceTtl,
+  }) async {
+    final roomRef = _db.collection('rooms').doc(roomId);
+    final roomSnap = await roomRef.get();
+    if (!roomSnap.exists) return;
+
+    final cutoff = Timestamp.fromDate(DateTime.now().subtract(staleAfter));
+    final playersRef = roomRef.collection('players');
+
+    final staleByHeartbeat =
+        await playersRef.where('lastActiveAt', isLessThan: cutoff).get();
+    final staleWithoutHeartbeat =
+        await playersRef.where('lastActiveAt', isEqualTo: null).get();
+
+    final stale = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final d in staleByHeartbeat.docs) {
+      stale[d.id] = d;
+    }
+    for (final d in staleWithoutHeartbeat.docs) {
+      final joinedAt = d.data()['joinedAt'] as Timestamp?;
+      final joinedAtMs = joinedAt?.millisecondsSinceEpoch;
+      final cutoffMs = cutoff.millisecondsSinceEpoch;
+      if (joinedAtMs != null && joinedAtMs <= cutoffMs) {
+        stale[d.id] = d;
+      }
+    }
+    if (stale.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final d in stale.values) {
+      batch.delete(d.reference);
+      batch.delete(roomRef.collection('rematch').doc(d.id));
+    }
+    await batch.commit();
+
+    final remainingSnap = await playersRef.get();
+    final remainingDocs = remainingSnap.docs.toList();
+    if (remainingDocs.isEmpty) {
+      await roomRef.delete();
+      return;
+    }
+
+    final roomData = roomSnap.data() ?? <String, dynamic>{};
+    final hostUid = (roomData['hostUid'] ?? '').toString();
+    final removedHost = hostUid.isNotEmpty && stale.containsKey(hostUid);
+
+    final patch = <String, dynamic>{
+      'playerCount': remainingDocs.length,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (removedHost) {
+      remainingDocs.sort((a, b) {
+        final ta =
+            (a.data()['joinedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        final tb =
+            (b.data()['joinedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        return ta.compareTo(tb);
+      });
+      final nextHost = (remainingDocs.first.data()['uid'] ?? remainingDocs.first.id)
+          .toString();
+      patch['hostUid'] = nextHost;
+    }
+
+    await roomRef.update(patch);
   }
 
   // ========= 対戦進行 =========
@@ -318,6 +408,7 @@ class VersusService {
           'photoURL': u.photoURL,
           'score': playerSnap.exists ? (playerSnap.data()?['score'] ?? 0) : 0,
           'startReady': false,
+          'lastActiveAt': FieldValue.serverTimestamp(),
           'joinedAt':
               playerSnap.exists
                   ? (playerSnap.data()?['joinedAt'] ?? FieldValue.serverTimestamp())
@@ -454,6 +545,7 @@ class VersusService {
 
   Future<bool> _tryJoinPublicRoom(String roomId) async {
     try {
+      await pruneStalePlayers(roomId);
       await _joinRoom(roomId, enforceCapacity: true);
       return true;
     } catch (e) {

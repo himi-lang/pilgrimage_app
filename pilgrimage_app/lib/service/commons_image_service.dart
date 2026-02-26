@@ -2,7 +2,7 @@ import 'dart:convert';
 //ここでは、聖地マップに出力される画像が正常に出力させるようにするコードがある。
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+import 'package:http/http.dart' as http; //APIたたく
 
 /// Wikimedia Commons の画像（File:）から、表示用の thumb URL を解決するサービス。
 ///
@@ -13,10 +13,10 @@ import 'package:http/http.dart' as http;
 /// - "https://commons.wikimedia.org/wiki/File:Tokyo_Skytree.jpg"
 /// - "https://upload.wikimedia.org/wikipedia/commons/thumb/..../Tokyo_Skytree.jpg/640px-Tokyo_Skytree.jpg"
 class CommonsImageService {
-
   void _log(String msg) {
     debugPrint('[CommonsImageService] $msg');
   }
+
   /// 成功した結果だけキャッシュ（nullはキャッシュしない）
   final Map<String, String> _urlCache = {};
 
@@ -53,6 +53,15 @@ class CommonsImageService {
     });
   }
 
+  /// APIアクセスせずに生成できる即時用URL（Special:FilePath）。
+  /// 初回表示を速くしたい用途向け。
+  String? quickThumbUrl(String raw, {int width = 1200}) {
+    if (!isCommonsCandidate(raw)) return null;
+    final normalized = _normalizeToFileName(raw);
+    if (normalized == null || normalized.isEmpty) return null;
+    return _buildSpecialFilePathUrl(normalized, width: width);
+  }
+
   /// Commons API で解決すべき raw かどうか
   bool isCommonsCandidate(String raw) {
     final t = raw.trim();
@@ -81,8 +90,12 @@ class CommonsImageService {
   /// HEAD で到達性・Content-Type を確認（サーバがHEAD拒否なら 405 などになる）
   Future<void> debugHead(String url) async {
     try {
-      final res = await http.head(Uri.parse(url)).timeout(const Duration(seconds: 10));
-      debugPrint('HEAD $url -> ${res.statusCode} / ${res.headers['content-type']}');
+      final res = await http
+          .head(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+      debugPrint(
+        'HEAD $url -> ${res.statusCode} / ${res.headers['content-type']}',
+      );
     } catch (e) {
       debugPrint('HEAD error $url -> $e');
     }
@@ -92,12 +105,11 @@ class CommonsImageService {
   Future<void> debugProbe(String url) async {
     try {
       final res = await http
-          .get(
-            Uri.parse(url),
-            headers: const {'Range': 'bytes=0-200'},
-          )
+          .get(Uri.parse(url), headers: const {'Range': 'bytes=0-200'})
           .timeout(const Duration(seconds: 10));
-      debugPrint('GET(range) $url -> ${res.statusCode} / ${res.headers['content-type']}');
+      debugPrint(
+        'GET(range) $url -> ${res.statusCode} / ${res.headers['content-type']}',
+      );
     } catch (e) {
       debugPrint('GET(range) error $url -> $e');
     }
@@ -110,7 +122,7 @@ class CommonsImageService {
   /// raw を「Commonsのファイル名（File:なし）」へ正規化
   String? _normalizeToFileName(String raw) {
     final t = raw.trim();
-    if (t.isEmpty) return null;
+    if (t.isEmpty) return null; //ダメならnullで
 
     // commons:xxx
     if (t.startsWith('commons:')) {
@@ -202,13 +214,21 @@ class CommonsImageService {
     }
   }
 
-  Future<String?> _fetchWithFallback(String fileName, {required int preferredWidth}) async {
+  String _buildSpecialFilePathUrl(String fileName, {required int width}) {
+    final encoded = Uri.encodeComponent(fileName);
+    return Uri.https(
+      'commons.wikimedia.org',
+      '/wiki/Special:FilePath/$encoded',
+      {'width': '$width'},
+    ).toString();
+  }
+
+  Future<String?> _fetchWithFallback(
+    String fileName, {
+    required int preferredWidth,
+  }) async {
     // 幅フォールバック（thumb生成失敗に強い）
-    final widths = <int>[
-      preferredWidth,
-      640,
-      320,
-    ].toList();
+    final widths = <int>[preferredWidth, 640, 320].toList();
 
     // 重複除去（順序保持）
     final seen = <int>{};
@@ -224,7 +244,10 @@ class CommonsImageService {
     return null;
   }
 
-  Future<String?> _fetchBestUrlByFileName(String fileName, {required int width}) async {
+  Future<String?> _fetchBestUrlByFileName(
+    String fileName, {
+    required int width,
+  }) async {
     final uri = Uri.https('commons.wikimedia.org', '/w/api.php', {
       'action': 'query',
       'titles': 'File:$fileName',
@@ -238,8 +261,10 @@ class CommonsImageService {
     });
 
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
-    _log('API status=${response.statusCode} title="File:$fileName" width=$width');
-    
+    _log(
+      'API status=${response.statusCode} title="File:$fileName" width=$width',
+    );
+
     if (response.statusCode != 200) return null;
 
     final decoded = jsonDecode(response.body);
@@ -251,8 +276,10 @@ class CommonsImageService {
 
     // missing の場合
     if (page['missing'] == true) {
-      _log('API status=${response.statusCode} title="File:$fileName" width=$width');
-       return null;
+      _log(
+        'API status=${response.statusCode} title="File:$fileName" width=$width',
+      );
+      return null;
     }
 
     final info = page['imageinfo'];
