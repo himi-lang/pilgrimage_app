@@ -75,6 +75,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // 画像検索モードから来た作品の pin 固定を適用済みかどうか
   bool _initialWorkApplied = false;
 
+  bool get _hasInitialWorkTitle =>
+      widget.initialWorkTitle != null &&
+      widget.initialWorkTitle!.trim().isNotEmpty;
+
   // --- 端末保存キー ---
   static const _kLat = 'resume_lat';
   static const _kLng = 'resume_lng';
@@ -90,9 +94,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _locationsStream = FirebaseService().locationsStreamAllWorks();
 
-    final hasInitialWork =
-        widget.initialWorkTitle != null &&
-        widget.initialWorkTitle!.trim().isNotEmpty;
+    final hasInitialWork = _hasInitialWorkTitle;
 
     if (hasInitialWork) {
       // 画像検索モードから来たとき：検索窓だけ先にセット
@@ -729,11 +731,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // --- AppBar（検索ボックス付き） ---
   ObstructingPreferredSizeWidget _buildAppBar() {
     return CupertinoNavigationBar(
+      automaticallyImplyLeading: false,
+      leading: const AppBackButton(),
       backgroundColor: Theme.of(context).colorScheme.primary,
       automaticBackgroundVisibility: false,
       middle: SizedBox(
         width: double.infinity,
         child: CupertinoSearchTextField(
+          backgroundColor: CupertinoColors.white,
           controller: _searchCtrl,
           placeholder: '作品名・スポット名・住所',
           autocorrect: false,
@@ -928,8 +933,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             _onceAfterBuildRan = true;
             WidgetsBinding.instance.addPostFrameCallback((_) async {
               final hasInitialWork =
-                  widget.initialWorkTitle != null &&
-                  widget.initialWorkTitle!.trim().isNotEmpty;
+                  _hasInitialWorkTitle;
 
               if (hasInitialWork && !_initialWorkApplied) {
                 _initialWorkApplied = true;
@@ -965,9 +969,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     CameraUpdate.newCameraPosition(_initialCamera),
                   );
                   await Future.delayed(const Duration(milliseconds: 120));
-                  // マップ作成完了後にも初期処理を走らせる。
-                  // after-build が先に動いて _mapReady=false だった場合の取りこぼしを防ぐ。
-                  await _applyResumeOrStart();
+                  // 画像検索モードから来たときは、現在地へ寄せず
+                  // _confirmSearch(initialWorkTitle) のフォーカスを優先する。
+                  if (!_hasInitialWorkTitle) {
+                    // マップ作成完了後にも初期処理を走らせる。
+                    // after-build が先に動いて _mapReady=false だった場合の取りこぼしを防ぐ。
+                    await _applyResumeOrStart();
+                  }
                 },
                 cameraTargetBounds: CameraTargetBounds.unbounded,
                 myLocationEnabled: true,
