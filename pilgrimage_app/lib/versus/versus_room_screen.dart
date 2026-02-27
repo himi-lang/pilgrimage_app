@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../widgets/app_ui.dart';
 import '../service/spot_image.dart';
@@ -951,6 +952,8 @@ class _PlayPane extends StatefulWidget {
 
 class _PlayPaneState extends State<_PlayPane> {
   late Stopwatch _sw;
+  late final AudioPlayer _resultSfxPlayer;
+  bool _playedResultSfx = false;
   bool _submitted = false;
   bool _roundClosed = false;
   late int _remain;
@@ -972,6 +975,7 @@ class _PlayPaneState extends State<_PlayPane> {
   void initState() {
     super.initState();
     _sw = Stopwatch()..start();
+    _resultSfxPlayer = AudioPlayer();
     _listenPlayersCount();
     _setupForRound();
     _listenAnswers();
@@ -981,6 +985,7 @@ class _PlayPaneState extends State<_PlayPane> {
   void didUpdateWidget(covariant _PlayPane old) {
     super.didUpdateWidget(old);
     if (widget.round != old.round) {
+      _playedResultSfx = false;
       _submitted = false;
       _roundClosed = false;
       _revealTitle = null;
@@ -997,7 +1002,28 @@ class _PlayPaneState extends State<_PlayPane> {
   void dispose() {
     _ticker?.cancel();
     _answersSub?.cancel();
+    _resultSfxPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _playResultSfx(bool isCorrect) async {
+    try {
+      await _resultSfxPlayer.stop();
+      await _resultSfxPlayer.play(
+        AssetSource(
+          isCorrect ? 'music_dir/quiz_correct.mp3' : 'music_dir/Incorrect.mp3',
+        ),
+      );
+    } catch (_) {
+      // no-op
+    }
+  }
+
+  bool _isCorrectAnswer(String answer) {
+    final target = (widget.question['workTitle'] ?? '').toString();
+    String normalize(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[\s　]'), '');
+    return normalize(answer) == normalize(target);
   }
 
   void _listenPlayersCount() async {
@@ -1234,6 +1260,11 @@ class _PlayPaneState extends State<_PlayPane> {
     if (!timeUp) _submitted = true;
     _sw.stop();
     final send = ans ?? '';
+    if (!_playedResultSfx) {
+      final isCorrect = !timeUp && _isCorrectAnswer(send);
+      unawaited(_playResultSfx(isCorrect));
+      _playedResultSfx = true;
+    }
     await widget.onSubmit(send, _sw.elapsedMilliseconds, timeUp: timeUp);
     if (!mounted) return;
     if (!_MUTE_SNACK && !timeUp) {

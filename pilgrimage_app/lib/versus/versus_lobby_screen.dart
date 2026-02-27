@@ -125,7 +125,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
           // ★ 背景画像
           decoration: const BoxDecoration(
             image: DecorationImage(
-              image: AssetImage('assets/image_dir/tokyo_tower.jpg'),
+              image: AssetImage('assets/image_dir/test1.jpg'),
               fit: BoxFit.cover,
             ),
           ),
