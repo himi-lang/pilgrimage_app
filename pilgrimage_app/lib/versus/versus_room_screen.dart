@@ -31,6 +31,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   bool get isHost => _hostUid == _auth.currentUser?.uid;
   String? _hostUid;
   bool _startingInProgress = false;
+  bool _roomDeletedRedirectScheduled = false;
 
   // 自動進行監視
   StreamSubscription? _autoAnsSub;
@@ -87,6 +88,17 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     } finally {
       _presenceSyncing = false;
     }
+  }
+
+  void _redirectToModeSelectionOnRoomDeleted() {
+    if (_roomDeletedRedirectScheduled || !mounted) return;
+    _roomDeletedRedirectScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/mode_selection', (route) => false);
+    });
   }
 
   Future<bool> _confirmLeaveRoom(BuildContext context) async {
@@ -255,10 +267,13 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         }
         final data = snap.data!.data();
         if (data == null) {
+          _redirectToModeSelectionOnRoomDeleted();
           return const CupertinoPageScaffold(
             child: Material(
               color: Colors.transparent,
-              child: Center(child: Text('部屋が削除されました')),
+              child: Center(
+                child: Text('ルームが終了しました。画面を戻しています…'),
+              ),
             ),
           );
         }

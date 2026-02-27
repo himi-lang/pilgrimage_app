@@ -178,8 +178,8 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
   Widget _buildFlipCard() {
     final faceText =
         _showBack
-            ? (_animeQuote.isEmpty ? '名言が登録されていません。' : _animeQuote)
-            : _animeTitle;
+            ? _animeTitle
+            : (_animeQuote.isEmpty ? '名言が登録されていません。' : _animeQuote);
     return GestureDetector(
       onTap: _toggleCard,
       child: AnimatedBuilder(
