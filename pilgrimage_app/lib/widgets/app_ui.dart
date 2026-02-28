@@ -9,6 +9,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../mode_selection_screen.dart';
 
+//ここでは、共通するUIのパーツを作成している。
+
 enum AppMode { map, versus }
 
 class AppBackButton extends StatelessWidget {
@@ -19,25 +21,23 @@ class AppBackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
-      minSize: 30,
-      onPressed: onPressed ?? () => Navigator.of(context).maybePop(),
-      child: const Icon(
-        CupertinoIcons.back,
-        color: CupertinoColors.white,
-      ),
+      minimumSize: const Size(44, 44),
+      onPressed:
+          onPressed ?? () => Navigator.of(context).maybePop(), //null合体演算子。
+      child: const Icon(CupertinoIcons.back, color: CupertinoColors.white),
     );
   }
 }
 
-class ModeSwitchButton extends StatelessWidget { //appBarにある、押すと最初のマップor対戦モード選択に戻る。
+class ModeSwitchButton extends StatelessWidget {
+  //appBarにある、押すと最初のマップor対戦モード選択に戻る。
   // AppMode は互換性のため残しておくだけで、今回の挙動では使わない
   final AppMode currentMode;
   // ルーム離脱時の確認・後処理はそのまま使えるように残しておく
   final Future<bool> Function()? confirm;
   final Future<void> Function()? beforeNavigate;
 
-  const ModeSwitchButton
-  ({
+  const ModeSwitchButton({
     super.key,
     required this.currentMode,
     this.confirm,
@@ -45,13 +45,14 @@ class ModeSwitchButton extends StatelessWidget { //appBarにある、押すと�
   });
 
   @override
-  Widget build(BuildContext context) 
-  {
-    return CupertinoButton
-    (
+  Widget build(BuildContext context) {
+    return CupertinoButton(
       padding: EdgeInsets.zero,
       minSize: 30,
-      child: const Icon(CupertinoIcons.square_grid_2x2,color: CupertinoColors.white,),
+      child: const Icon(
+        CupertinoIcons.square_grid_2x2,
+        color: CupertinoColors.white,
+      ),
       onPressed: () async {
         // ルームから出るときの確認をしたい画面では、これまで通り confirm/beforeNavigate が使える
         if (confirm != null) {
@@ -65,8 +66,7 @@ class ModeSwitchButton extends StatelessWidget { //appBarにある、押すと�
         if (!context.mounted) return;
 
         // ★ モード選択画面に戻る
-        Navigator.of(context).pushAndRemoveUntil
-        (
+        Navigator.of(context).pushAndRemoveUntil(
           CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
           (route) => false, // それ以前の画面スタックを全部クリア
         );
@@ -76,8 +76,7 @@ class ModeSwitchButton extends StatelessWidget { //appBarにある、押すと�
 }
 
 /// 共通AppBar（右端：モード切替 → 追加actions → ログアウト）
-ObstructingPreferredSizeWidget commonAppBar
-(
+ObstructingPreferredSizeWidget commonAppBar(
   BuildContext context, {
   required String title,
   Widget? leading,
@@ -90,11 +89,9 @@ ObstructingPreferredSizeWidget commonAppBar
       leading ??
       (Navigator.of(context).canPop() ? const AppBackButton() : null);
 
-  final trailingChildren = <Widget>
-  [
+  final trailingChildren = <Widget>[
     if (currentMode != null)
-      ModeSwitchButton
-      (
+      ModeSwitchButton(
         currentMode: currentMode,
         confirm: modeConfirm,
         beforeNavigate: modeBeforeNavigate,
@@ -103,8 +100,7 @@ ObstructingPreferredSizeWidget commonAppBar
     const AppMenuButton(),
   ];
 
-  return CupertinoNavigationBar
-  (
+  return CupertinoNavigationBar(
     automaticallyImplyLeading: false,
     leading: resolvedLeading,
     middle: Text(title, style: const TextStyle(color: CupertinoColors.white)),
@@ -115,17 +111,19 @@ ObstructingPreferredSizeWidget commonAppBar
 }
 
 /// 共通ハンバーガーメニュー
-class AppMenuButton extends StatelessWidget {//AppBarのハンバーガーメニュー
+class AppMenuButton extends StatelessWidget {
+  //AppBarのハンバーガーメニュー
   const AppMenuButton({super.key});
 
   @override
-  Widget build(BuildContext context) 
-  {
-    return CupertinoButton
-    (
+  Widget build(BuildContext context) {
+    return CupertinoButton(
       padding: EdgeInsets.zero,
       minSize: 30,
-      child: const Icon(CupertinoIcons.line_horizontal_3,color: CupertinoColors.white,),
+      child: const Icon(
+        CupertinoIcons.line_horizontal_3,
+        color: CupertinoColors.white,
+      ),
       onPressed: () => _openAppMenu(context),
     );
   }
@@ -133,16 +131,80 @@ class AppMenuButton extends StatelessWidget {//AppBarのハンバーガーメニ
 
 // ==== メニュー中身 ====
 const _appVersion = '1.0.0+1'; //ここでアプリのバージョンを変更していく。
+const _menuListTextStyle = TextStyle(
+  color: CupertinoColors.black,
+  decoration: TextDecoration.none,
+);
+
+class _PolicyMenuItem {
+  final String title;
+  final IconData icon;
+  final String assetPath;
+
+  const _PolicyMenuItem({
+    required this.title,
+    required this.icon,
+    required this.assetPath,
+  });
+}
+
+const _policyMenuItems = <_PolicyMenuItem>[
+  _PolicyMenuItem(
+    title: '利用規約',
+    icon: Icons.description_outlined,
+    assetPath: 'assets/information/Terms_of_use.txt',
+  ),
+  _PolicyMenuItem(
+    title: 'プライバシーポリシー',
+    icon: Icons.privacy_tip_outlined,
+    assetPath: 'assets/information/privacy_policy.txt',
+  ),
+  _PolicyMenuItem(
+    title: '特定商取引法',
+    icon: Icons.article_outlined,
+    assetPath: 'assets/information/Commercial_Transactions.txt',
+  ),
+  _PolicyMenuItem(
+    title: '著作権',
+    icon: Icons.copyright,
+    assetPath: 'assets/information/Copyright.txt',
+  ),
+  _PolicyMenuItem(
+    title: 'お問い合わせ',
+    icon: Icons.mail,
+    assetPath: 'assets/information/info.txt',
+  ),
+  _PolicyMenuItem(
+    title: '注意事項',
+    icon: Icons.note,
+    assetPath: 'assets/information/note.txt',
+  ),
+];
+
+ListTile _menuActionTile({
+  required IconData icon,
+  required String title,
+  String? subtitle,
+  required VoidCallback onTap,
+}) {
+  return ListTile(
+    leading: Icon(icon),
+    title: Text(title, style: _menuListTextStyle),
+    subtitle:
+        subtitle == null ? null : Text(subtitle, style: _menuListTextStyle),
+    onTap: onTap,
+  );
+}
+
 //ここはハンバーガーメニューの中身の記述
 void _openAppMenu(BuildContext outerContext) {
   //outerは画面側のcontext
-  showModalBottomSheet
-  (
+  showModalBottomSheet(
     context: outerContext,
     useSafeArea: true,
     isScrollControlled: true, // ★ 追加：シートを大きくできるようにする
     showDragHandle: true,
-    builder: (sheetContext) {
+    builder: (_) {
       //sheetContextはボトムシート側のcontext
       return DraggableScrollableSheet(
         expand: false,
@@ -161,96 +223,34 @@ void _openAppMenu(BuildContext outerContext) {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text(
-                  'プロフィール編集',
-                  style: TextStyle(
-                    color: CupertinoColors.black,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-                subtitle: const Text(
-                  '表示名・アイコンURLを変更',
-                  style: TextStyle(
-                    color: CupertinoColors.black,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-                onTap: () {
-                  _showProfileDialog(outerContext);
-                },
+              _menuActionTile(
+                icon: Icons.person,
+                title: 'プロフィール編集',
+                subtitle: '表示名・アイコンURLを変更',
+                onTap: () => _showProfileDialog(outerContext),
               ),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text(
-                  'ログアウト',
-                  style: TextStyle(
-                    color: CupertinoColors.black,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-                onTap: () {
-                  AuthService.signOutAndGoRoot(outerContext);
-                },
+              _menuActionTile(
+                icon: Icons.logout,
+                title: 'ログアウト',
+                onTap: () => AuthService.signOutAndGoRoot(outerContext),
               ),
               const Divider(height: 24),
 
               // 利用規約 / プライバシー / 特商法
-              _policyTile(
-                context,
-                title: '利用規約',
-                icon: Icons.description_outlined, //好きなアイコンを選択可能
-                assetPath: 'assets/information/Terms_of_use.txt',
-              ),
-              _policyTile(
-                context,
-                title: 'プライバシーポリシー',
-                icon: Icons.privacy_tip_outlined,
-                assetPath: 'assets/information/privacy_policy.txt',
-              ),
-              _policyTile(
-                context,
-                title: '特定商取引法',
-                icon: Icons.article_outlined,
-                assetPath: 'assets/information/Commercial_Transactions.txt',
-              ),
-              _policyTile(
-                context,
-                title: '著作権',
-                icon: Icons.copyright,
-                assetPath: 'assets/information/Copyright.txt',
-              ),
-              _policyTile(
-                context,
-                title: "お問い合わせ",
-                icon: Icons.mail,
-                assetPath: 'assets/information/info.txt',
-              ),
-              _policyTile(
-                context,
-                title: "注意事項",
-                icon: Icons.note,
-                assetPath: 'assets/information/note.txt',
+              ..._policyMenuItems.map(
+                (item) => _policyTile(
+                  context,
+                  title: item.title,
+                  icon: item.icon,
+                  assetPath: item.assetPath,
+                ),
               ),
 
               // バージョン情報
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text(
-                  'バージョン情報',
-                  style: TextStyle(
-                    color: CupertinoColors.black,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-                subtitle: const Text(
-                  'アプリのバージョンを表示',
-                  style: TextStyle(
-                    color: CupertinoColors.black,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
+              _menuActionTile(
+                icon: Icons.info_outline,
+                title: 'バージョン情報',
+                subtitle: 'アプリのバージョンを表示',
                 onTap: () {
                   _openInfoPage(
                     outerContext,
@@ -305,19 +305,10 @@ ListTile _policyTile(
 }) {
   return ListTile(
     leading: Icon(icon),
-    title: Text(
-      title,
-      style: const TextStyle(
-        color: CupertinoColors.black,
-        decoration: TextDecoration.none,
-      ),
-    ),
+    title: Text(title, style: _menuListTextStyle),
     subtitle: Text(
-      assetPath != null ? "タップして内容を表示" : (placeholder ?? '内容は後で追加されます'),
-      style: const TextStyle(
-        color: CupertinoColors.black,
-        decoration: TextDecoration.none,
-      ),
+      assetPath != null ? 'タップして内容を表示' : (placeholder ?? '内容は後で追加されます'),
+      style: _menuListTextStyle,
     ),
     onTap: () async {
       String body;
@@ -358,7 +349,10 @@ class _InfoPage extends StatelessWidget {
       navigationBar: CupertinoNavigationBar(
         automaticallyImplyLeading: false,
         leading: Navigator.of(context).canPop() ? const AppBackButton() : null,
-        middle: Text(title, style: const TextStyle(color: CupertinoColors.white)),
+        middle: Text(
+          title,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         automaticBackgroundVisibility: false,
       ),

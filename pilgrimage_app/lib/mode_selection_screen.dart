@@ -22,62 +22,70 @@ Widget withTestBackground(Widget child, {double overlayAlpha = 0.82}) {
   );
 }
 
+class _ModeMenuCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final Color backgroundColor;
+
+  const _ModeMenuCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    required this.backgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: backgroundColor,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 40, color: CupertinoColors.white),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: CupertinoColors.white),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              color: CupertinoColors.white,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ModeSelectionScreen extends StatelessWidget {
   const ModeSelectionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    Widget card //のちのち使うcardっていうwidgetのひな形を作成。
-    ({
-      required IconData icon,
-      required String title,
-      required String subtitle,
-      required VoidCallback onTap,
-    }) {
-      return InkWell //widgetで、タップできるように。タップ時のリップルも出してくれる。
-      (
-        onTap: onTap, //インスタンスを作成するときに指定する。
-        child: Container(
-          //タッチできる箱を作る。
-          padding: const EdgeInsets.all(20), //paddingを左右上下に20px
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: cs.surface,
-          ),
-          child: Row //横向きにwidgetを配置していく。
-          (
-            children: [
-              Icon(icon, size: 40, color: CupertinoColors.white),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: CupertinoColors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(color: CupertinoColors.white),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                CupertinoIcons.chevron_right,
-                color: CupertinoColors.white,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     //ここから画面の形を作っていく。widget buildに返す。
     return CupertinoPageScaffold(
@@ -107,10 +115,11 @@ class ModeSelectionScreen extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // ★ 聖地マップモード → マップ用サブメニュー
-                        card(
+                        _ModeMenuCard(
                           icon: Icons.map,
                           title: '聖地マップモード',
                           subtitle: '地図で探す・作品から探す',
+                          backgroundColor: cs.surface,
                           onTap: () {
                             //on_clickedと同じ
                             Navigator.of(context).push(
@@ -122,10 +131,11 @@ class ModeSelectionScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                         // ★ 対戦モード → 対戦モード用サブメニュー
-                        card(
+                        _ModeMenuCard(
                           icon: Icons.sports_esports,
                           title: '対戦モード',
                           subtitle: '早押しクイズ：みんなと / プライベート',
+                          backgroundColor: cs.surface,
                           onTap: () {
                             Navigator.of(context).push(
                               CupertinoPageRoute(
@@ -157,53 +167,6 @@ class MapModeMenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    Widget card //表示するボタンの中身をここで設定する。のちにこれに入れてボタンを作成する。
-    ({
-      required IconData icon,
-      required String title,
-      required String subtitle,
-      required VoidCallback onTap,
-    }) {
-      return InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(20), //左右上下に20pxのpaddingを用意
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: cs.surfaceContainer,
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 40, color: CupertinoColors.white),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: CupertinoColors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(color: CupertinoColors.white),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                CupertinoIcons.chevron_right,
-                color: CupertinoColors.white,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return CupertinoPageScaffold //聖地マップモードの選択画面の本体。
     (
@@ -241,10 +204,11 @@ class MapModeMenuScreen extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        card(
+                        _ModeMenuCard(
                           icon: Icons.map_outlined,
                           title: '地図から探す',
                           subtitle: '地図からスポットを発見・検索',
+                          backgroundColor: cs.surfaceContainer,
                           onTap: () {
                             Navigator.of(context).push(
                               CupertinoPageRoute(builder: (_) => const MapScreen()),
@@ -252,10 +216,11 @@ class MapModeMenuScreen extends StatelessWidget {
                           },
                         ),
                         const SizedBox(height: 16),
-                        card(
+                        _ModeMenuCard(
                           icon: Icons.image_search,
                           title: '作品から探す',
                           subtitle: 'アニメ作品を検索・タップ',
+                          backgroundColor: cs.surfaceContainer,
                           onTap: () {
                             Navigator.of(context).push(
                               CupertinoPageRoute(
@@ -290,57 +255,6 @@ class VersusModeMenuScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    Widget card({
-      required IconData icon,
-      required String title,
-      required String subtitle,
-      required VoidCallback onTap,
-    }) {
-      return InkWell(
-        onTap: onTap,
-
-        child: Container //装飾可能で押せる箱を作成する。
-        (
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: cs.surfaceContainer,
-          ),
-
-          child: Row //横軸に子供を並べる。
-          (
-            children: //複数の子を並べられる。
-                [
-              Icon(icon, size: 40, color: CupertinoColors.white),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: CupertinoColors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(color: CupertinoColors.white),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                CupertinoIcons.chevron_right,
-                color: CupertinoColors.white,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return CupertinoPageScaffold(
       navigationBar: commonAppBar(
         context,
@@ -374,10 +288,11 @@ class VersusModeMenuScreen extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // ボタン1：プライベート対戦
-                        card(
+                        _ModeMenuCard(
                           icon: Icons.lock,
                           title: 'プライベート対戦',
                           subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
+                          backgroundColor: cs.surfaceContainer,
                           onTap: () {
                             InterstitialAdManager.show(
                               onFinished: () {
@@ -391,10 +306,11 @@ class VersusModeMenuScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                         // ボタン2：みんなと対戦
-                        card(
+                        _ModeMenuCard(
                           icon: Icons.group,
                           title: 'みんなと対戦',
                           subtitle: '全国のユーザーとランダムマッチ',
+                          backgroundColor: cs.surfaceContainer,
                           onTap: () {
                             InterstitialAdManager.show(
                               onFinished: () {

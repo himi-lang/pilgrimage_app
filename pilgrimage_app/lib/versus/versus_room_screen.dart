@@ -208,8 +208,26 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     }
   }
 
+  Future<void> _advanceToNextRoundOrFinish({
+    required DocumentReference<Map<String, dynamic>> roomDoc,
+    required int expectedRound,
+  }) async {
+    final dataNow = (await roomDoc.get()).data();
+    if (dataNow == null) return;
+
+    final cur = (dataNow['round'] ?? 0) as int;
+    if (cur != expectedRound) return;
+
+    final total = ((dataNow['questions'] ?? []) as List).length;
+    if (cur < total - 1) {
+      await _svc.nextRound(widget.roomId, cur + 1);
+    } else {
+      await _svc.finishMatch(widget.roomId);
+    }
+  }
+
   // ===== 自動で次へ（誰か正解 or 全員回答） =====
-  void _ensureAutoAdvance(String roomId, int round, int total) {
+  void _ensureAutoAdvance(String roomId, int round) {
     if (!isHost) return;
     if (_watchingRound == round) return;
 
@@ -237,17 +255,10 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
           if (allAnswered) {
             _advancedThisRound = true;
             await Future.delayed(const Duration(milliseconds: _REVEAL_HOLD_MS));
-            final snap = await roomDoc.get();
-            final data = snap.data();
-            if (data == null) return;
-            final cur = (data['round'] ?? 0) as int;
-            if (cur != round) return;
-            final qs = (data['questions'] ?? []) as List;
-            if (cur < qs.length - 1) {
-              await _svc.nextRound(roomId, cur + 1);
-            } else {
-              await _svc.finishMatch(roomId); // finishedAt を刻む
-            }
+            await _advanceToNextRoundOrFinish(
+              roomDoc: roomDoc,
+              expectedRound: round,
+            );
           }
         });
   }
@@ -300,7 +311,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
             _globalWorkTitlePool.isNotEmpty ? _globalWorkTitlePool : localPool;
 
         if (status != 'waiting' && qs.isNotEmpty) {
-          _ensureAutoAdvance(widget.roomId, round, qs.length);
+          _ensureAutoAdvance(widget.roomId, round);
         }
 
         return WillPopScope(
@@ -405,19 +416,11 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                           await Future.delayed(
                             const Duration(milliseconds: _REVEAL_HOLD_MS),
                           );
-                          final roomDoc = _db
-                              .collection('rooms')
-                              .doc(widget.roomId);
-                          final dataNow = (await roomDoc.get()).data();
-                          if (dataNow == null) return;
-                          final cur = (dataNow['round'] ?? 0) as int;
-                          final total =
-                              ((dataNow['questions'] ?? []) as List).length;
-                          if (cur < total - 1) {
-                            await _svc.nextRound(widget.roomId, cur + 1);
-                          } else {
-                            await _svc.finishMatch(widget.roomId);
-                          }
+                          final roomDoc = _db.collection('rooms').doc(widget.roomId);
+                          await _advanceToNextRoundOrFinish(
+                            roomDoc: roomDoc,
+                            expectedRound: round,
+                          );
                         }
                       },
                     );
