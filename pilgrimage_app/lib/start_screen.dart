@@ -1,4 +1,5 @@
 // lib/start_screen.dart
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,8 +19,8 @@ class StartScreen extends StatefulWidget {
 
 class _StartScreenState extends State<StartScreen> {
   late final AudioPlayer _player;
-  double _opacity = 1.0; // ★ フェード用
-  bool _isProcessing = false; // ★ 連打防止
+  double _opacity = 1.0; //フェード用
+  bool _isProcessing = false; //連打防止
 
   @override
   void initState() {
@@ -72,9 +73,9 @@ class _StartScreenState extends State<StartScreen> {
 
     if (user == null) {
       // 未ログイン → ログイン画面へ
-      Navigator.of(
-        context,
-      ).pushReplacement(CupertinoPageRoute(builder: (_) => const LoginScreen()));
+      Navigator.of(context).pushReplacement(
+        CupertinoPageRoute(builder: (_) => const LoginScreen()),
+      );
     } else {
       // ログイン済み → モード選択へ
       Navigator.of(context).pushReplacement(
@@ -96,31 +97,44 @@ class _StartScreenState extends State<StartScreen> {
             fit: StackFit.expand,
             children: [
               // 背景画像
-              Image.asset('assets/image_dir/long_hair.jpg', fit: BoxFit.cover),
+              Image.asset('assets/image_dir/キービジュアル.jpg', fit: BoxFit.cover),
+
+              BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(color: Colors.black.withOpacity(0.20)),
+              ),
+
+              Center(
+                child: Image.asset(
+                  "assets/image_dir/キービジュアル.jpg",
+                  fit: BoxFit.contain,
+                ),
+              ),
               // うっすら暗くするレイヤー
               Container(color: Colors.black.withOpacity(0.25)),
-              // 「タップしてスタート」の帯
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 60),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 26,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Text(
-                      'タップしてスタート',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 18,
-                        letterSpacing: 2,
-                        decoration: TextDecoration.none,
-                        decorationColor: Colors.transparent,
+
+              SafeArea(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 26,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Text(
+                        "タップしてスタート",
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 18,
+                          letterSpacing: 2,
+                          decoration: TextDecoration.none,
+                        ),
                       ),
                     ),
                   ),

@@ -93,12 +93,16 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final clampedMedia = media.copyWith(
-      textScaler: media.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.2),
+      textScaler: media.textScaler.clamp(
+        minScaleFactor: 1.0,
+        maxScaleFactor: 1.2,
+      ),
     );
 
-    final titleStyle = Theme.of(
-      context,
-    ).textTheme.titleMedium?.copyWith(fontSize: 16, fontWeight: FontWeight.w600);
+    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+    );
     const fieldStyle = TextStyle(fontSize: 16, color: Colors.black);
     const placeholderStyle = TextStyle(
       fontSize: 15,
@@ -114,10 +118,9 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
           currentMode: AppMode.versus,
           leading: AppBackButton(
             onPressed: () {
-              Navigator.of(context).pushNamedAndRemoveUntil(
-                '/mode_selection',
-                (route) => false,
-              );
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/mode_selection', (route) => false);
             },
           ),
         ),
@@ -125,15 +128,16 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
           // ★ 背景画像
           decoration: const BoxDecoration(
             image: DecorationImage(
-              image: AssetImage('assets/image_dir/test1.jpg'),
+              image: AssetImage('assets/image_dir/long_hair.jpg'),
               fit: BoxFit.cover,
             ),
           ),
           // 背景の上にうっすら白をかぶせて内容を載せる
           child: Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.white.withValues(alpha: 0.85),
+            color: Colors.white.withValues(alpha: 0),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 CupertinoButton.filled(
