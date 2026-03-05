@@ -1,3 +1,0 @@
-#include? "../Runner/Secrets.xcconfig"
-#include "Generated.xcconfig"
-#include "ephemeral/Flutter-Generated.xcconfig"

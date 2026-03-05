@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -24,35 +26,35 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>GMS_API_KEY</key>
-	<string>$(GMS_API_KEY)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_dartVmService._tcp</string>
-	</array>
-	<key>CFBundleURLTypes</key>
-	<array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
 		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
+			<key>UIWindowSceneSessionRoleApplication</key>
 			<array>
-				<string>com.googleusercontent.apps.747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52</string>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
 			</array>
 		</dict>
-	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>開発用のデバッグ接続にローカルネットワークを使用します。</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>アプリ使用中の位置情報を利用します。</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>現在地を地図に表示するために位置情報を利用します。</string>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -66,5 +68,20 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>マップ上で現在地を表示するために位置情報を使用します。</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>バックグラウンドでも位置情報を使用します。</string>
 </dict>
 </plist>
