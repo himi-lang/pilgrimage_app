@@ -7,13 +7,18 @@ import 'image_search_screen.dart';
 import 'widgets/bottom_banner_ad.dart';
 import 'ads/interstitial_ad_manager.dart';
 
-Widget withTestBackground(Widget child, {double overlayAlpha = 0.82}) {
+const String _defaultBackgroundImage = 'assets/image_dir/キービジュアル.jpg';
+const String _mapModeBackgroundImage = 'assets/image_dir/ロング背景.jpg';
+const String _versusModeBackgroundImage = 'assets/image_dir/ショート背景.jpg';
+
+Widget backGround(
+  Widget child, {
+  double overlayAlpha = 0.82,
+  String imagePath = _defaultBackgroundImage, //背景画像
+}) {
   return Container(
-    decoration: const BoxDecoration(
-      image: DecorationImage(
-        image: AssetImage('assets/image_dir/キービジュアル.jpg'),
-        fit: BoxFit.cover,
-      ),
+    decoration: BoxDecoration(
+      image: DecorationImage(image: AssetImage(imagePath), fit: BoxFit.cover),
     ),
     child: Container(
       color: Colors.white.withValues(alpha: overlayAlpha),
@@ -99,7 +104,7 @@ class ModeSelectionScreen extends StatelessWidget {
         automaticBackgroundVisibility: false,
         trailing: AppMenuButton(),
       ),
-      child: withTestBackground(
+      child: backGround(
         Material(
           color: Colors.transparent,
           child: Column(
@@ -188,7 +193,7 @@ class MapModeMenuScreen extends StatelessWidget {
           ],
         ),
       ),
-      child: withTestBackground(
+      child: backGround(
         Material //ここからappBarから下の箱
         (
           color: Colors.transparent,
@@ -241,6 +246,7 @@ class MapModeMenuScreen extends StatelessWidget {
             ],
           ),
         ),
+        imagePath: _mapModeBackgroundImage,
       ),
     );
   }
@@ -274,7 +280,7 @@ class VersusModeMenuScreen extends StatelessWidget {
         // AppMode に versus があれば渡してもOK
         // currentMode: AppMode.versus,
       ),
-      child: withTestBackground(
+      child: backGround(
         Material(
           color: Colors.transparent,
           child: Column(
@@ -334,6 +340,7 @@ class VersusModeMenuScreen extends StatelessWidget {
             ],
           ),
         ),
+        imagePath: _versusModeBackgroundImage,
       ),
     );
   }

@@ -14,7 +14,7 @@ class ImageSearchScreen extends StatefulWidget {
 
 class _ImageSearchScreenState extends State<ImageSearchScreen> {
   String _query = '';
-  bool _isGrid = true;
+  final bool _isGrid = true;
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +171,7 @@ class _ImageSearchScreenState extends State<ImageSearchScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                )?.copyWith(color: CupertinoColors.white),
+                ).copyWith(color: CupertinoColors.white),
               ),
             ),
           ],

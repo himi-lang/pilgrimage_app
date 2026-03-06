@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'mode_selection_screen.dart';
+import 'widgets/dialogs.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,20 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    showCupertinoDialog<void>(
-      context: context,
-      builder:
-          (_) => CupertinoAlertDialog(
-            content: Text(msg),
-            actions: [
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-    );
+    showAppMessageDialog(context, msg);
   }
 
   Future<void> _handleEmail() async {
@@ -129,7 +117,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final clampedMedia = media.copyWith(
-      textScaler: media.textScaler.clamp(minScaleFactor: 1.0, maxScaleFactor: 1.15),
+      textScaler: media.textScaler.clamp(
+        minScaleFactor: 1.0,
+        maxScaleFactor: 1.15,
+      ),
     );
     const labelStyle = TextStyle(
       fontSize: 16,
@@ -155,7 +146,10 @@ class _LoginScreenState extends State<LoginScreen> {
       data: clampedMedia,
       child: CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          middle: Text(title, style: const TextStyle(color: CupertinoColors.white)),
+          middle: Text(
+            title,
+            style: const TextStyle(color: CupertinoColors.white),
+          ),
           backgroundColor: CupertinoTheme.of(context).primaryColor,
           automaticBackgroundVisibility: false,
         ),
@@ -196,8 +190,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           autocorrect: false,
                           suffix: CupertinoButton(
                             padding: EdgeInsets.zero,
-                            minSize: 30,
-                            onPressed: () => setState(() => _obscure = !_obscure),
+                            onPressed:
+                                () => setState(() => _obscure = !_obscure),
+                            minimumSize: Size(30, 30),
                             child: Icon(
                               _obscure
                                   ? CupertinoIcons.eye
@@ -233,7 +228,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed:
                               _busy
                                   ? null
-                                  : () => setState(() => _isSignUp = !_isSignUp),
+                                  : () =>
+                                      setState(() => _isSignUp = !_isSignUp),
                           child: Text(
                             _isSignUp
                                 ? '既にアカウントをお持ちの方（ログインへ）'

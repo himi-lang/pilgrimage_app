@@ -5,7 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../app_routes.dart';
 import '../widgets/app_ui.dart';
+import '../widgets/dialogs.dart';
 import 'versus_service.dart';
 
 class PublicMatchWaitScreen extends StatefulWidget {
@@ -85,13 +87,13 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
   Future<Map<String, String>?> _pickFromQuoteCollection() async {
     try {
       final snap = await _db.collection('アニメ名言集').get();
-      final docs = snap.docs.where((d) {
-        final data = d.data();
-        final desc = (data['description'] ?? data['quote'] ?? '')
-            .toString()
-            .trim();
-        return desc.isNotEmpty;
-      }).toList();
+      final docs =
+          snap.docs.where((d) {
+            final data = d.data();
+            final desc =
+                (data['description'] ?? data['quote'] ?? '').toString().trim();
+            return desc.isNotEmpty;
+          }).toList();
       if (docs.isEmpty) return null;
       final pick = docs[Random().nextInt(docs.length)];
       final data = pick.data();
@@ -111,9 +113,7 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
       final pick = snap.docs[Random().nextInt(snap.docs.length)];
       final data = pick.data();
       final quote =
-          (data['description'] ?? data['note'] ?? '名言は準備中です')
-              .toString()
-              .trim();
+          (data['description'] ?? data['note'] ?? '名言は準備中です').toString().trim();
       return {'title': pick.id, 'quote': quote};
     } catch (e) {
       debugPrint('[PublicMatchWait] 作品一覧フライヤー read failed: $e');
@@ -133,25 +133,12 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
         _matchingHint = null;
         _loading = false;
       });
-      Navigator.of(context).pushReplacementNamed('/versus/room/$roomId');
+      Navigator.of(context).pushReplacementNamed(AppRoutes.versusRoom(roomId));
     } catch (e) {
       debugPrint('[PublicMatchWait] matching failed: $e');
       if (!mounted) return;
       setState(() => _loading = false);
-      showCupertinoDialog<void>(
-        context: context,
-        builder:
-            (_) => CupertinoAlertDialog(
-              content: const Text('マッチングに失敗しました'),
-              actions: [
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-      );
+      showAppMessageDialog(context, 'マッチングに失敗しました');
     }
   }
 
@@ -161,7 +148,9 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
       await _service.leaveRoom(roomId);
     }
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/mode_selection', (r) => false);
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.modeSelection, (r) => false);
   }
 
   Future<void> _toggleCard() async {
@@ -189,9 +178,10 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
           final isBack = angle > pi / 2;
           return Transform(
             alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.0012)
-              ..rotateY(angle),
+            transform:
+                Matrix4.identity()
+                  ..setEntry(3, 2, 0.0012)
+                  ..rotateY(angle),
             child:
                 isBack
                     ? Transform(
@@ -268,7 +258,10 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
                   const SizedBox(height: 24),
                   Text(
                     'マッチング中${'.' * _dotCount}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (_matchingHint != null) ...[
                     const SizedBox(height: 8),

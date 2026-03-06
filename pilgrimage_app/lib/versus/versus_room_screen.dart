@@ -7,9 +7,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:audioplayers/audioplayers.dart';
 
+import '../app_routes.dart';
+import '../mode_selection_screen.dart';
 import '../widgets/app_ui.dart';
 import '../service/spot_image.dart';
-import '../mode_selection_screen.dart';
 import 'versus_service.dart';
 
 // ===== 設定 =====
@@ -98,7 +99,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
       if (!mounted) return;
       Navigator.of(
         context,
-      ).pushNamedAndRemoveUntil('/mode_selection', (route) => false);
+      ).pushNamedAndRemoveUntil(AppRoutes.modeSelection, (route) => false);
     });
   }
 
@@ -177,9 +178,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('問題を読み込み中…')));
       }
-      final qs = await _buildQuestions(
-        count: 5,
-      );
+      final qs = await _buildQuestions(count: 5);
       if (qs.isEmpty) {
         await _svc.releaseStartLock(widget.roomId);
         if (!mounted) return;
@@ -283,9 +282,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
           return const CupertinoPageScaffold(
             child: Material(
               color: Colors.transparent,
-              child: Center(
-                child: Text('ルームが終了しました。画面を戻しています…'),
-              ),
+              child: Center(child: Text('ルームが終了しました。画面を戻しています…')),
             ),
           );
         }
@@ -338,11 +335,11 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                   ),
                 CupertinoButton(
                   padding: EdgeInsets.zero,
-                  minSize: 30,
                   onPressed: () async {
                     final ok = await _confirmLeaveRoom(context);
                     if (ok) await _goLobby();
                   },
+                  minimumSize: Size(30, 30),
                   child: const Icon(CupertinoIcons.home),
                 ),
               ],
@@ -353,79 +350,81 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
               color: Colors.transparent,
               child: Column(
                 children: [
-                _PlayersList(roomId: widget.roomId),
-                const Divider(height: 1),
-                Expanded(
-                  child: () {
-                    if (status == 'waiting') {
-                      if (hasCode) {
-                        return _WaitingPane(
-                          isHost: isHost,
+                  _PlayersList(roomId: widget.roomId),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: () {
+                      if (status == 'waiting') {
+                        if (hasCode) {
+                          return _WaitingPane(
+                            isHost: isHost,
+                            onStart: () => _handleStart(data),
+                          );
+                        }
+                        return _PublicWaitingPane(
+                          roomId: widget.roomId,
                           onStart: () => _handleStart(data),
                         );
                       }
-                      return _PublicWaitingPane(
-                        roomId: widget.roomId,
-                        onStart: () => _handleStart(data),
-                      );
-                    }
-                    if (status == 'finished' ||
-                        qs.isEmpty ||
-                        round < 0 ||
-                        round >= qs.length) {
-                      return _FinishedPane(
-                        roomId: widget.roomId,
-                        finishedAt: finishedAt,
-                        isPrivate: hasCode,
-                        isHost: isHost,
-                        onRematchStartByHost: (
-                          countHint,
-                        ) async {
-                          final qsNew = await _buildQuestions(
-                            count: countHint ?? (qs.isNotEmpty ? qs.length : 5),
-                          );
-                          await _resetPlayersScore();
-                          await _clearAnswers();
-                          await _svc.startMatch(widget.roomId, qsNew);
-                        },
-                        onGoLobby: _goLobby,
-                      );
-                    }
-                    return _PlayPane(
-                      roomId: widget.roomId,
-                      question: Map<String, dynamic>.from(qs[round] as Map),
-                      round: round,
-                      total: qs.length,
-                      roundTimeSec: roundTimeSec,
-                      roundStartedAt: roundStartedAt,
-                      workPool: workPool,
-                      onSubmit: (ans, timeMs, {bool timeUp = false}) async {
-                        final target = (qs[round]['workTitle'] ?? '') as String;
-                        final correct = _match(ans, target);
-
-                        await _svc.submitAnswer(
+                      if (status == 'finished' ||
+                          qs.isEmpty ||
+                          round < 0 ||
+                          round >= qs.length) {
+                        return _FinishedPane(
                           roomId: widget.roomId,
-                          roundNo: round,
-                          answer: ans,
-                          timeMs: timeMs,
-                          correct: correct,
+                          finishedAt: finishedAt,
+                          isPrivate: hasCode,
+                          isHost: isHost,
+                          onRematchStartByHost: (countHint) async {
+                            final qsNew = await _buildQuestions(
+                              count:
+                                  countHint ?? (qs.isNotEmpty ? qs.length : 5),
+                            );
+                            await _resetPlayersScore();
+                            await _clearAnswers();
+                            await _svc.startMatch(widget.roomId, qsNew);
+                          },
+                          onGoLobby: _goLobby,
                         );
+                      }
+                      return _PlayPane(
+                        roomId: widget.roomId,
+                        question: Map<String, dynamic>.from(qs[round] as Map),
+                        round: round,
+                        total: qs.length,
+                        roundTimeSec: roundTimeSec,
+                        roundStartedAt: roundStartedAt,
+                        workPool: workPool,
+                        onSubmit: (ans, timeMs, {bool timeUp = false}) async {
+                          final target =
+                              (qs[round]['workTitle'] ?? '') as String;
+                          final correct = _match(ans, target);
 
-                        // 先に正解しただけでは進めず、時間切れ時のみホストが遷移を確定する。
-                        if (isHost && timeUp) {
-                          await Future.delayed(
-                            const Duration(milliseconds: _REVEAL_HOLD_MS),
+                          await _svc.submitAnswer(
+                            roomId: widget.roomId,
+                            roundNo: round,
+                            answer: ans,
+                            timeMs: timeMs,
+                            correct: correct,
                           );
-                          final roomDoc = _db.collection('rooms').doc(widget.roomId);
-                          await _advanceToNextRoundOrFinish(
-                            roomDoc: roomDoc,
-                            expectedRound: round,
-                          );
-                        }
-                      },
-                    );
-                  }(),
-                ),
+
+                          // 先に正解しただけでは進めず、時間切れ時のみホストが遷移を確定する。
+                          if (isHost && timeUp) {
+                            await Future.delayed(
+                              const Duration(milliseconds: _REVEAL_HOLD_MS),
+                            );
+                            final roomDoc = _db
+                                .collection('rooms')
+                                .doc(widget.roomId);
+                            await _advanceToNextRoundOrFinish(
+                              roomDoc: roomDoc,
+                              expectedRound: round,
+                            );
+                          }
+                        },
+                      );
+                    }(),
+                  ),
                 ],
               ),
             ),
@@ -436,10 +435,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   }
 
   // ===== 問題生成（作品重複なし） =====
-  Future<List<Map<String, dynamic>>> _buildQuestions(
-    {
-    int count = 5,
-  }) async {
+  Future<List<Map<String, dynamic>>> _buildQuestions({int count = 5}) async {
     final rand = Random();
     final worksSnap = await _db.collection('聖地情報').get();
     final works = worksSnap.docs.toList()..shuffle(rand);
@@ -455,7 +451,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
       final d = (spotsSnap.docs.toList()..shuffle(rand)).first;
       final m = d.data();
-      double _to(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
+      double to(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
 
       out.add({
         'id': d.id,
@@ -463,8 +459,8 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         'workTitle': (m['workTitle'] ?? w.id) as String,
         'image': m['image'] ?? '',
         'address': (m['address'] ?? '').toString(),
-        'latitude': _to(m['latitude']),
-        'longitude': _to(m['longitude']),
+        'latitude': to(m['latitude']),
+        'longitude': to(m['longitude']),
       });
       usedWorks.add(w.id);
       if (out.length >= count) break;
@@ -496,8 +492,9 @@ class _PlayersList extends StatelessWidget {
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: ref.orderBy('joinedAt').snapshots(),
         builder: (c, s) {
-          if (!s.hasData)
+          if (!s.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final docs = s.data!.docs;
           return ListView.separated(
             scrollDirection: Axis.horizontal,
@@ -610,8 +607,11 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
   Future<void> _setReady(bool ready) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    final ref =
-        _db.collection('rooms').doc(widget.roomId).collection('players').doc(uid);
+    final ref = _db
+        .collection('rooms')
+        .doc(widget.roomId)
+        .collection('players')
+        .doc(uid);
     await ref.set({'startReady': ready}, SetOptions(merge: true));
   }
 
@@ -687,8 +687,7 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
       builder: (context, roomSnap) {
         final roomData = roomSnap.data?.data() ?? <String, dynamic>{};
         final status = (roomData['status'] ?? 'waiting').toString();
-        final countdownTs =
-            roomData['publicCountdownStartedAt'] as Timestamp?;
+        final countdownTs = roomData['publicCountdownStartedAt'] as Timestamp?;
         final elapsed =
             countdownTs == null
                 ? 0
@@ -711,7 +710,9 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
             }
 
             final readyCount =
-                players.where((d) => (d.data()['startReady'] ?? false) == true).length;
+                players
+                    .where((d) => (d.data()['startReady'] ?? false) == true)
+                    .length;
             final myReady = players.any(
               (d) =>
                   (d.data()['uid'] ?? '').toString() == uid &&
@@ -735,7 +736,8 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
                   Text('開始ボタンを押した人数: $readyCount / $playersCount'),
                   const SizedBox(height: 12),
                   CupertinoButton.filled(
-                    onPressed: status == 'waiting' ? () => _setReady(!myReady) : null,
+                    onPressed:
+                        status == 'waiting' ? () => _setReady(!myReady) : null,
                     child: Text(myReady ? '開始を取り消す' : '開始'),
                   ),
                   const SizedBox(height: 12),
@@ -759,8 +761,7 @@ class _FinishedPane extends StatefulWidget {
   final DateTime? finishedAt;
   final bool isPrivate; // 招待コードあり＝プライベート
   final bool isHost;
-  final Future<void> Function(int? countHint)
-  onRematchStartByHost;
+  final Future<void> Function(int? countHint) onRematchStartByHost;
   final VoidCallback onGoLobby;
 
   const _FinishedPane({
@@ -903,8 +904,9 @@ class _FinishedPaneState extends State<_FinishedPane> {
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: ref.snapshots(),
             builder: (c, s) {
-              if (!s.hasData)
+              if (!s.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
               final docs = s.data!.docs;
               return ListView.separated(
                 padding: const EdgeInsets.all(16),
@@ -1097,7 +1099,9 @@ class _PlayPaneState extends State<_PlayPane> {
       final cand = pool[rnd.nextInt(pool.length)];
       if (cand != correct) set.add(cand);
     }
-    while (set.length < 4) set.add('（ダミー）${set.length}');
+    while (set.length < 4) {
+      set.add('（ダミー）${set.length}');
+    }
     final list = set.toList()..shuffle(rnd);
 
     setState(() {
@@ -1113,8 +1117,8 @@ class _PlayPaneState extends State<_PlayPane> {
   @override
   Widget build(BuildContext context) {
     final q = widget.question;
-    double _toD(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
-    final pos = LatLng(_toD(q['latitude']), _toD(q['longitude']));
+    double toD(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
+    final pos = LatLng(toD(q['latitude']), toD(q['longitude']));
 
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -1125,11 +1129,7 @@ class _PlayPaneState extends State<_PlayPane> {
         ),
         const SizedBox(height: 6),
         LinearProgressIndicator(value: _remain / widget.roundTimeSec),
-        Row(
-          children: [
-            Text('残り $_remain s'),
-          ],
-        ),
+        Row(children: [Text('残り $_remain s')]),
         const SizedBox(height: 8),
         if ((q['image'] as String?)?.isNotEmpty == true)
           ClipRRect(

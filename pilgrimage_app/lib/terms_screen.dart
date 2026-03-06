@@ -76,6 +76,7 @@ class TermsScreen extends StatelessWidget {
                 children: [
                   // 同意しない
                   Expanded(
+                    //場合によって拒否ボタンはいらない可能性。
                     child: CupertinoButton(
                       onPressed: () {
                         // 呼び出し元に false を返して閉じる

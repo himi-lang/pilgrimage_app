@@ -8,6 +8,7 @@ import 'start_screen.dart';
 import 'login_screen.dart';
 import 'mode_selection_screen.dart';
 import 'map_screen.dart';
+import 'app_routes.dart';
 import 'versus/versus_lobby_screen.dart';
 import 'versus/public_match_wait_screen.dart';
 import 'versus/versus_room_screen.dart';
@@ -49,18 +50,18 @@ class MyApp extends StatelessWidget {
         platform: TargetPlatform.iOS,
         useMaterial3: false,
         colorScheme: const ColorScheme.light(
-          primary: Color.fromARGB(255,30,69,110),
+          primary: Color.fromARGB(255, 30, 69, 110),
           secondary: CupertinoColors.activeGreen,
-          surface: Color.fromARGB(255,30,69,110),
+          surface: Color.fromARGB(255, 30, 69, 110),
           onSurface: CupertinoColors.white,
         ),
         scaffoldBackgroundColor: const Color(0xFFF7F6F2),
         textTheme: ThemeData.light().textTheme.apply(
-              bodyColor: CupertinoColors.black,
-              displayColor: CupertinoColors.black,
-              decoration: TextDecoration.none,
-              decorationColor: CupertinoColors.transparent,
-            ),
+          bodyColor: CupertinoColors.black,
+          displayColor: CupertinoColors.black,
+          decoration: TextDecoration.none,
+          decorationColor: CupertinoColors.transparent,
+        ),
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: CupertinoPageTransitionsBuilder(),
@@ -70,15 +71,12 @@ class MyApp extends StatelessWidget {
             TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
           },
         ),
-        cupertinoOverrideTheme: const CupertinoThemeData
-        (
+        cupertinoOverrideTheme: const CupertinoThemeData(
           primaryColor: CupertinoColors.systemBlue,
           scaffoldBackgroundColor: CupertinoColors.systemGroupedBackground,
           barBackgroundColor: CupertinoColors.systemGrey6,
-          textTheme: CupertinoTextThemeData
-          (
-            textStyle: TextStyle
-            (
+          textTheme: CupertinoTextThemeData(
+            textStyle: TextStyle(
               color: CupertinoColors.black,
               decoration: TextDecoration.none,
               decorationColor: CupertinoColors.transparent,
@@ -95,19 +93,19 @@ class MyApp extends StatelessWidget {
 
       // いままで使ってたルートたち
       routes: {
-        '/login': (_) => const LoginScreen(),
-        '/mode_selection': (_) => const ModeSelectionScreen(),
-        '/map': (_) => const MapScreen(),
-        '/versus/lobby': (_) => const VersusLobbyScreen(),
-        '/versus/public_wait': (_) => const PublicMatchWaitScreen(),
+        AppRoutes.login: (_) => const LoginScreen(),
+        AppRoutes.modeSelection: (_) => const ModeSelectionScreen(),
+        AppRoutes.map: (_) => const MapScreen(),
+        AppRoutes.versusLobby: (_) => const VersusLobbyScreen(),
+        AppRoutes.versusPublicWait: (_) => const PublicMatchWaitScreen(),
       },
 
       // /versus/room/{roomId} だけ特別扱い
       //対戦roomは毎回番号が違うので可変する。
       onGenerateRoute: (settings) {
         final name = settings.name ?? '';
-        if (name.startsWith('/versus/room/')) {
-          final id = name.substring('/versus/room/'.length);
+        if (name.startsWith(AppRoutes.versusRoomPrefix)) {
+          final id = name.substring(AppRoutes.versusRoomPrefix.length);
           return CupertinoPageRoute(
             builder: (_) => VersusRoomScreen(roomId: id),
             settings: settings,

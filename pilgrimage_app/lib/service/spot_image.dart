@@ -63,7 +63,10 @@ class _SpotImageState extends State<SpotImage> {
     }
 
     // Commons系なら解決を試す
-    final resolved = await SpotImage._commons.resolveThumbUrl(s, width: widget.width);
+    final resolved = await SpotImage._commons.resolveThumbUrl(
+      s,
+      width: widget.width,
+    );
     debugPrint('[SpotImage] resolved: raw="$s" -> "$resolved"');
 
     // 解決できない場合、rawがURLならrawを使う（File名だけ等はnull）

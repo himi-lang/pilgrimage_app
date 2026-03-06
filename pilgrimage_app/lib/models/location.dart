@@ -23,7 +23,7 @@ class LocationData {
   });
 
   factory LocationData.fromFirestore(String id, Map<String, dynamic> data) {
-    double _toDouble(dynamic v) {
+    double toDouble(dynamic v) {
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v) ?? 0.0;
       return 0.0;
@@ -35,8 +35,8 @@ class LocationData {
       address: (data['address'] ?? '').toString(),
       description: (data['description'] ?? '').toString(),
       image: (data['image'] ?? '').toString(),
-      latitude: _toDouble(data['latitude']),
-      longitude: _toDouble(data['longitude']),
+      latitude: toDouble(data['latitude']),
+      longitude: toDouble(data['longitude']),
       workTitle: (data['workTitle'] ?? '').toString(),
     );
   }

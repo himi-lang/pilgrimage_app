@@ -25,9 +25,7 @@ class VersusService {
     // 同時参加レース対策:
     // 1) 探す 2) 少し待ってもう一度探す 3) それでも無ければ作る
     for (var attempt = 0; attempt < 4; attempt++) {
-      final found = await _findOpenPublicRoom(
-        excludeHostUid: me,
-      );
+      final found = await _findOpenPublicRoom(excludeHostUid: me);
       if (found != null) {
         final joined = await _tryJoinPublicRoom(found);
         if (joined) return found;
@@ -37,9 +35,7 @@ class VersusService {
         Duration(milliseconds: 250 + Random().nextInt(550)),
       );
 
-      final foundAfterWait = await _findOpenPublicRoom(
-        excludeHostUid: me,
-      );
+      final foundAfterWait = await _findOpenPublicRoom(excludeHostUid: me);
       if (foundAfterWait != null) {
         final joined = await _tryJoinPublicRoom(foundAfterWait);
         if (joined) return foundAfterWait;
@@ -50,9 +46,7 @@ class VersusService {
     await _joinRoom(roomId);
 
     // 同時作成で分断した場合、他の公開待機ルームへ寄せる
-    final candidate = await _findOpenPublicRoom(
-      excludeHostUid: me,
-    );
+    final candidate = await _findOpenPublicRoom(excludeHostUid: me);
     if (candidate != null && candidate != roomId) {
       final joined = await _tryJoinPublicRoom(candidate);
       if (joined) {
@@ -64,9 +58,7 @@ class VersusService {
   }
 
   /// ルームを新規作成（プライベート/公開）
-  Future<String> createRoom({
-    required bool isPrivate,
-  }) async {
+  Future<String> createRoom({required bool isPrivate}) async {
     final id = await _createRoomDoc(isPrivate: isPrivate);
     await _joinRoom(id);
     return id;
@@ -201,8 +193,9 @@ class VersusService {
             (b.data()['joinedAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
         return ta.compareTo(tb);
       });
-      final nextHost = (remainingDocs.first.data()['uid'] ?? remainingDocs.first.id)
-          .toString();
+      final nextHost =
+          (remainingDocs.first.data()['uid'] ?? remainingDocs.first.id)
+              .toString();
       patch['hostUid'] = nextHost;
     }
 
@@ -400,22 +393,19 @@ class VersusService {
         throw StateError('room-full');
       }
 
-      tx.set(
-        playerRef,
-        {
-          'uid': u.uid,
-          'displayName': u.displayName ?? 'Player',
-          'photoURL': u.photoURL,
-          'score': playerSnap.exists ? (playerSnap.data()?['score'] ?? 0) : 0,
-          'startReady': false,
-          'lastActiveAt': FieldValue.serverTimestamp(),
-          'joinedAt':
-              playerSnap.exists
-                  ? (playerSnap.data()?['joinedAt'] ?? FieldValue.serverTimestamp())
-                  : FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      tx.set(playerRef, {
+        'uid': u.uid,
+        'displayName': u.displayName ?? 'Player',
+        'photoURL': u.photoURL,
+        'score': playerSnap.exists ? (playerSnap.data()?['score'] ?? 0) : 0,
+        'startReady': false,
+        'lastActiveAt': FieldValue.serverTimestamp(),
+        'joinedAt':
+            playerSnap.exists
+                ? (playerSnap.data()?['joinedAt'] ??
+                    FieldValue.serverTimestamp())
+                : FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       final newCount = alreadyJoined ? playerCount : (playerCount + 1);
       final patch = <String, dynamic>{
@@ -426,9 +416,7 @@ class VersusService {
     });
   }
 
-  Future<String> _createRoomDoc({
-    required bool isPrivate,
-  }) async {
+  Future<String> _createRoomDoc({required bool isPrivate}) async {
     final u = user!;
     final doc = _db.collection('rooms').doc();
     final code = isPrivate ? await _genUniqueCode() : null;
@@ -479,19 +467,18 @@ class VersusService {
     return 100 + (900 * ratio).round();
   }
 
-  Future<String?> _findOpenPublicRoom({
-    required String excludeHostUid,
-  }) async {
+  Future<String?> _findOpenPublicRoom({required String excludeHostUid}) async {
     String? pickBest(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-      final candidates = docs.where((d) {
-        final data = d.data();
-        final isPrivate = (data['isPrivate'] ?? true) as bool;
-        final hostUid = (data['hostUid'] ?? '').toString();
-        final playerCount = (data['playerCount'] ?? 0) as int;
-        return !isPrivate &&
-            hostUid != excludeHostUid &&
-            playerCount < publicMaxPlayers;
-      }).toList();
+      final candidates =
+          docs.where((d) {
+            final data = d.data();
+            final isPrivate = (data['isPrivate'] ?? true) as bool;
+            final hostUid = (data['hostUid'] ?? '').toString();
+            final playerCount = (data['playerCount'] ?? 0) as int;
+            return !isPrivate &&
+                hostUid != excludeHostUid &&
+                playerCount < publicMaxPlayers;
+          }).toList();
       if (candidates.isEmpty) return null;
 
       candidates.sort((a, b) {

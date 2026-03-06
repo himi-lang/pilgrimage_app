@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../widgets/app_ui.dart';
+import '../widgets/dialogs.dart';
+import '../app_routes.dart';
 import 'versus_service.dart';
 
 class VersusLobbyScreen extends StatefulWidget {
@@ -22,20 +24,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    showCupertinoDialog<void>(
-      context: context,
-      builder:
-          (_) => CupertinoAlertDialog(
-            content: Text(msg),
-            actions: [
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-    );
+    showAppMessageDialog(context, msg);
   }
 
   Future<void> _quickMatch() async {
@@ -44,7 +33,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
     try {
       final id = await s.quickJoin();
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/versus/room/$id');
+      Navigator.pushReplacementNamed(context, AppRoutes.versusRoom(id));
     } catch (e) {
       _toast('クイックマッチに失敗: $e');
     } finally {
@@ -58,7 +47,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
     try {
       final id = await s.createRoom(isPrivate: true);
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/versus/room/$id');
+      Navigator.pushReplacementNamed(context, AppRoutes.versusRoom(id));
     } catch (e) {
       _toast('部屋の作成に失敗: $e');
     } finally {
@@ -80,7 +69,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
         _toast('見つかりませんでした（コード・開始済み・終了の可能性）');
       } else {
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/versus/room/$id');
+        Navigator.pushReplacementNamed(context, AppRoutes.versusRoom(id));
       }
     } catch (e) {
       _toast('参加に失敗: $e');
@@ -118,9 +107,10 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
           currentMode: AppMode.versus,
           leading: AppBackButton(
             onPressed: () {
-              Navigator.of(
-                context,
-              ).pushNamedAndRemoveUntil('/mode_selection', (route) => false);
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                AppRoutes.modeSelection,
+                (route) => false,
+              );
             },
           ),
         ),
@@ -173,7 +163,7 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
                     const SizedBox(width: 8),
                     CupertinoButton.filled(
                       padding: const EdgeInsets.symmetric(horizontal: 14),
-                      minSize: 44,
+                      minimumSize: const Size(44, 44),
                       onPressed: _busy ? null : _joinByCode,
                       child: const Text('参加'),
                     ),

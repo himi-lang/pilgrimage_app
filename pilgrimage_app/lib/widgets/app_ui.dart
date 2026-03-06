@@ -48,11 +48,6 @@ class ModeSwitchButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
-      minSize: 30,
-      child: const Icon(
-        CupertinoIcons.square_grid_2x2,
-        color: CupertinoColors.white,
-      ),
       onPressed: () async {
         // ルームから出るときの確認をしたい画面では、これまで通り confirm/beforeNavigate が使える
         if (confirm != null) {
@@ -71,6 +66,11 @@ class ModeSwitchButton extends StatelessWidget {
           (route) => false, // それ以前の画面スタックを全部クリア
         );
       },
+      minimumSize: Size(30, 30),
+      child: const Icon(
+        CupertinoIcons.square_grid_2x2,
+        color: CupertinoColors.white,
+      ),
     );
   }
 }
@@ -119,12 +119,12 @@ class AppMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
-      minSize: 30,
+      onPressed: () => _openAppMenu(context),
+      minimumSize: Size(30, 30),
       child: const Icon(
         CupertinoIcons.line_horizontal_3,
         color: CupertinoColors.white,
       ),
-      onPressed: () => _openAppMenu(context),
     );
   }
 }

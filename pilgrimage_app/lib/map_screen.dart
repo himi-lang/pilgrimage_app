@@ -15,6 +15,7 @@ import 'firebase_service.dart';
 import './models/location.dart';
 import 'service/commons_image_service.dart';
 import 'widgets/app_ui.dart';
+import 'widgets/dialogs.dart';
 
 class MapScreen extends StatefulWidget {
   /// 画像検索モードから遷移してきたときに渡される作品タイトル
@@ -240,20 +241,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // === 現在地 ===
   void _showSnack(String msg) {
     if (!mounted) return;
-    showCupertinoDialog<void>(
-      context: context,
-      builder:
-          (_) => CupertinoAlertDialog(
-            content: Text(msg),
-            actions: [
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-    );
+    showAppMessageDialog(context, msg);
   }
 
   Future<LatLng?> _getUserLatLng() async {
@@ -512,13 +500,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         !_resolvedCommonsThumbCache.containsKey(key) &&
         _commonsResolveRequested.add(key)) {
       unawaited(
-        _commonsImageService.resolveThumbUrl(raw, width: 960).then((resolved) {
-          if (!mounted || resolved == null || resolved.isEmpty) return;
-          if (_resolvedCommonsThumbCache[key] == resolved) return;
-          _resolvedCommonsThumbCache[key] = resolved;
-          _imageCandidatesCache.remove(key);
-          if (mounted) setState(() {});
-        }).catchError((_) {}),
+        _commonsImageService
+            .resolveThumbUrl(raw, width: 960)
+            .then((resolved) {
+              if (!mounted || resolved == null || resolved.isEmpty) return;
+              if (_resolvedCommonsThumbCache[key] == resolved) return;
+              _resolvedCommonsThumbCache[key] = resolved;
+              _imageCandidatesCache.remove(key);
+              if (mounted) setState(() {});
+            })
+            .catchError((_) {}),
       );
     }
 
@@ -583,7 +574,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           children: [
             const SizedBox(height: 8),
             GestureDetector(
-              onTap: urls.isEmpty ? null : () => _openImageViewer(urls.first, d.name),
+              onTap:
+                  urls.isEmpty
+                      ? null
+                      : () => _openImageViewer(urls.first, d.name),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: AspectRatio(
@@ -870,154 +864,155 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         child: StreamBuilder<List<LocationData>>(
           stream: _locationsStream,
           builder: (context, snap) {
-          if (snap.hasError) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showSnack('データ取得エラー: ${snap.error}');
-            });
-          }
-          final isFirstLoad =
-              snap.connectionState == ConnectionState.waiting && _all.isEmpty;
-          final isUpdating =
-              snap.connectionState == ConnectionState.waiting &&
-              _all.isNotEmpty;
+            if (snap.hasError) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showSnack('データ取得エラー: ${snap.error}');
+              });
+            }
+            final isFirstLoad =
+                snap.connectionState == ConnectionState.waiting && _all.isEmpty;
+            final isUpdating =
+                snap.connectionState == ConnectionState.waiting &&
+                _all.isNotEmpty;
 
-          if (isFirstLoad) {
-            return Container(
-              color: const Color(0xFF101214),
-              alignment: Alignment.center,
-              child: const CircularProgressIndicator(),
-            );
-          }
+            if (isFirstLoad) {
+              return Container(
+                color: const Color(0xFF101214),
+                alignment: Alignment.center,
+                child: const CircularProgressIndicator(),
+              );
+            }
 
-          final data = snap.data ?? _all;
-          _all = data;
+            final data = snap.data ?? _all;
+            _all = data;
 
-          // 今の入力に対する候補（パネルと同じ20件）
-          final candidates = _filter(_all, _searchCtrl.text).take(20).toList();
+            // 今の入力に対する候補（パネルと同じ20件）
+            final candidates =
+                _filter(_all, _searchCtrl.text).take(20).toList();
 
-          // 表示するピン集合を決定
-          final List<LocationData> visible =
-              _pinsLocked
-                  ? _all.where((d) => _lockedPinIds.contains(d.id)).toList()
-                  : (_showCandidates && _searchCtrl.text.trim().isNotEmpty)
-                  ? candidates
-                  : _all;
+            // 表示するピン集合を決定
+            final List<LocationData> visible =
+                _pinsLocked
+                    ? _all.where((d) => _lockedPinIds.contains(d.id)).toList()
+                    : (_showCandidates && _searchCtrl.text.trim().isNotEmpty)
+                    ? candidates
+                    : _all;
 
-          // ズームに応じてマーカーを間引いてから描画
-          final currentZoom = _lastCamera?.zoom ?? 12.0;
-          final renderList =
-              _downsample(visible, currentZoom, max: 700);
+            // ズームに応じてマーカーを間引いてから描画
+            final currentZoom = _lastCamera?.zoom ?? 12.0;
+            final renderList = _downsample(visible, currentZoom, max: 700);
 
-          final markers =
-              renderList
-                  .map(
-                    (d) => Marker(
-                      markerId: MarkerId(d.id),
-                      position: LatLng(d.latitude, d.longitude),
-                      infoWindow: InfoWindow(
-                        title: d.name,
-                        snippet: 
-                        [
-                          d.workTitle,
-                          d.address,
-                        ].where((e) => e.isNotEmpty).join(' / '),
+            final markers =
+                renderList
+                    .map(
+                      (d) => Marker(
+                        markerId: MarkerId(d.id),
+                        position: LatLng(d.latitude, d.longitude),
+                        infoWindow: InfoWindow(
+                          title: d.name,
+                          snippet: [
+                            d.workTitle,
+                            d.address,
+                          ].where((e) => e.isNotEmpty).join(' / '),
+                          onTap: () => setState(() => _selected = d),
+                        ),
                         onTap: () => setState(() => _selected = d),
                       ),
-                      onTap: () => setState(() => _selected = d),
-                    ),
-                  )
-                  .toSet();
+                    )
+                    .toSet();
 
-          // 1回だけ：現在地→全体→復元 or 画像検索モード専用の初期表示
-          if (!_onceAfterBuildRan) {
-            _onceAfterBuildRan = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              final hasInitialWork =
-                  _hasInitialWorkTitle;
+            // 1回だけ：現在地→全体→復元 or 画像検索モード専用の初期表示
+            if (!_onceAfterBuildRan) {
+              _onceAfterBuildRan = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final hasInitialWork = _hasInitialWorkTitle;
 
-              if (hasInitialWork && !_initialWorkApplied) {
-                _initialWorkApplied = true;
-                await _confirmSearch(widget.initialWorkTitle!);
-              } else {
-                if (_mapReady) {
-                  await _applyResumeOrStart();
-                }
-                if (!_didRestoreSelected && _resumeSelectedId != null) {
-                  final d = _findById(_resumeSelectedId!);
-                  _didRestoreSelected = true;
-                  if (d != null) {
-                    setState(() => _selected = d);
-                    try {
-                      final c = await _controller();
-                      c.showMarkerInfoWindow(MarkerId(d.id));
-                    } catch (_) {}
+                if (hasInitialWork && !_initialWorkApplied) {
+                  _initialWorkApplied = true;
+                  await _confirmSearch(widget.initialWorkTitle!);
+                } else {
+                  if (_mapReady) {
+                    await _applyResumeOrStart();
+                  }
+                  if (!_didRestoreSelected && _resumeSelectedId != null) {
+                    final d = _findById(_resumeSelectedId!);
+                    _didRestoreSelected = true;
+                    if (d != null) {
+                      setState(() => _selected = d);
+                      try {
+                        final c = await _controller();
+                        c.showMarkerInfoWindow(MarkerId(d.id));
+                      } catch (_) {}
+                    }
                   }
                 }
-              }
-            });
-          }
+              });
+            }
 
             return Stack(
               children: [
-              Positioned.fill(child: Container(color: const Color(0xFF101214))),
-              GoogleMap(
-                initialCameraPosition: _initialCamera,
-                onMapCreated: (c) async {
-                  if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
-                  _mapReady = true;
-                  await c.moveCamera(
-                    CameraUpdate.newCameraPosition(_initialCamera),
-                  );
-                  await Future.delayed(const Duration(milliseconds: 120));
-                  // 画像検索モードから来たときは、現在地へ寄せず
-                  // _confirmSearch(initialWorkTitle) のフォーカスを優先する。
-                  if (!_hasInitialWorkTitle) {
-                    // マップ作成完了後にも初期処理を走らせる。
-                    // after-build が先に動いて _mapReady=false だった場合の取りこぼしを防ぐ。
-                    await _applyResumeOrStart();
-                  }
-                },
-                cameraTargetBounds: CameraTargetBounds.unbounded,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: true,
-                mapToolbarEnabled: false,
-                zoomControlsEnabled: false,
-                zoomGesturesEnabled: true,
-                tiltGesturesEnabled: true,
-                rotateGesturesEnabled: true,
-                markers: markers,
-                onTap: (_) {
-                  if (_showCandidates) setState(() => _showCandidates = false);
-                },
-                onCameraMove: (pos) => _lastCamera = pos,
-                onCameraIdle: () {
-                  final z = _lastCamera?.zoom ?? 12.0;
-                  final bucket = z.floorToDouble();
-                  if ((bucket - _lastZoomBucket).abs() >= 1) {
-                    _lastZoomBucket = bucket;
-                    if (mounted) setState(() => _markerRevision++);
-                  }
-                },
-              ),
-
-              // 候補パネルは candidates を表示
-              _buildCandidatePanel(candidates),
-              _buildZoomButtons(),
-              _buildSelectedCard(),
-
-              if (isUpdating)
                 Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      color: const Color(0x99000000),
-                      alignment: Alignment.topCenter,
-                      child: const Padding(
-                        padding: EdgeInsets.only(top: 8.0),
-                        child: LinearProgressIndicator(minHeight: 2),
+                  child: Container(color: const Color(0xFF101214)),
+                ),
+                GoogleMap(
+                  initialCameraPosition: _initialCamera,
+                  onMapCreated: (c) async {
+                    if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
+                    _mapReady = true;
+                    await c.moveCamera(
+                      CameraUpdate.newCameraPosition(_initialCamera),
+                    );
+                    await Future.delayed(const Duration(milliseconds: 120));
+                    // 画像検索モードから来たときは、現在地へ寄せず
+                    // _confirmSearch(initialWorkTitle) のフォーカスを優先する。
+                    if (!_hasInitialWorkTitle) {
+                      // マップ作成完了後にも初期処理を走らせる。
+                      // after-build が先に動いて _mapReady=false だった場合の取りこぼしを防ぐ。
+                      await _applyResumeOrStart();
+                    }
+                  },
+                  cameraTargetBounds: CameraTargetBounds.unbounded,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  mapToolbarEnabled: false,
+                  zoomControlsEnabled: false,
+                  zoomGesturesEnabled: true,
+                  tiltGesturesEnabled: true,
+                  rotateGesturesEnabled: true,
+                  markers: markers,
+                  onTap: (_) {
+                    if (_showCandidates)
+                      setState(() => _showCandidates = false);
+                  },
+                  onCameraMove: (pos) => _lastCamera = pos,
+                  onCameraIdle: () {
+                    final z = _lastCamera?.zoom ?? 12.0;
+                    final bucket = z.floorToDouble();
+                    if ((bucket - _lastZoomBucket).abs() >= 1) {
+                      _lastZoomBucket = bucket;
+                      if (mounted) setState(() => _markerRevision++);
+                    }
+                  },
+                ),
+
+                // 候補パネルは candidates を表示
+                _buildCandidatePanel(candidates),
+                _buildZoomButtons(),
+                _buildSelectedCard(),
+
+                if (isUpdating)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        color: const Color(0x99000000),
+                        alignment: Alignment.topCenter,
+                        child: const Padding(
+                          padding: EdgeInsets.only(top: 8.0),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             );
           },
