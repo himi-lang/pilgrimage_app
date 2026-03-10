@@ -5,6 +5,8 @@ import '../widgets/dialogs.dart';
 import '../app_routes.dart';
 import 'versus_service.dart';
 
+const String _versusBackgroundImagePath = 'assets/image_dir/background.jpg';
+
 class VersusLobbyScreen extends StatefulWidget {
   const VersusLobbyScreen({super.key});
   @override
@@ -15,6 +17,16 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   final s = VersusService();
   final codeCtrl = TextEditingController();
   bool _busy = false;
+  Future<void>? _precacheFuture;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheFuture ??= precacheImage(
+      const AssetImage(_versusBackgroundImagePath),
+      context,
+    );
+  }
 
   @override
   void dispose() {
@@ -25,6 +37,18 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   void _toast(String msg) {
     if (!mounted) return;
     showAppMessageDialog(context, msg);
+  }
+
+  void _handleBackToVersusSelection() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    navigator.pushNamedAndRemoveUntil(
+      AppRoutes.modeSelection,
+      (route) => false,
+    );
   }
 
   Future<void> _quickMatch() async {
@@ -95,20 +119,13 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
         context,
         title: '対戦ロビー',
         currentMode: AppMode.versus,
-        leading: AppBackButton(
-          onPressed: () {
-            Navigator.of(context).pushNamedAndRemoveUntil(
-              AppRoutes.modeSelection,
-              (route) => false,
-            );
-          },
-        ),
+        leading: AppBackButton(onPressed: _handleBackToVersusSelection),
       ),
       child: Container(
         // ★ 背景画像
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/image_dir/background.jpg'),
+            image: AssetImage(_versusBackgroundImagePath),
             fit: BoxFit.cover,
           ),
         ),

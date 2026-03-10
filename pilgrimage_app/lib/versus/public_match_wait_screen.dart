@@ -10,6 +10,8 @@ import '../widgets/app_ui.dart';
 import '../widgets/dialogs.dart';
 import 'versus_service.dart';
 
+const String _versusBackgroundImagePath = 'assets/image_dir/background.jpg';
+
 class PublicMatchWaitScreen extends StatefulWidget {
   const PublicMatchWaitScreen({super.key});
 
@@ -31,6 +33,7 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
   bool _showBack = false;
   Timer? _dotTimer;
   late final AnimationController _flipController;
+  Future<void>? _precacheFuture;
 
   @override
   void initState() {
@@ -56,6 +59,15 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
       if (!mounted) return;
       setState(() => _dotCount = (_dotCount % 3) + 1);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheFuture ??= precacheImage(
+      const AssetImage(_versusBackgroundImagePath),
+      context,
+    );
   }
 
   Future<void> _loadRandomQuote() async {
@@ -148,9 +160,13 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
       await _service.leaveRoom(roomId);
     }
     if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppRoutes.modeSelection, (r) => false);
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(); //手前に戻る
+      return;
+    }
+    //なにかしらで遷移できなかった時、最初の画面に戻るようにしている。
+    navigator.pushNamedAndRemoveUntil(AppRoutes.modeSelection, (r) => false);
   }
 
   Future<void> _toggleCard() async {
@@ -240,50 +256,71 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
           context,
           title: '対戦待機',
           currentMode: AppMode.versus,
+          leading: AppBackButton(
+            onPressed: () {
+              _cancelMatch();
+            },
+          ),
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'みんなで対戦',
-                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildFlipCard(),
-                  const SizedBox(height: 24),
-                  Text(
-                    'マッチング中${'.' * _dotCount}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (_matchingHint != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _matchingHint!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black87,
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  CupertinoButton.filled(
-                    onPressed: _cancelMatch,
-                    child: const Text('キャンセル'),
-                  ),
-                ],
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage(_versusBackgroundImagePath),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-          ),
+            Material(
+              color: Colors.transparent,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'みんなで対戦',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _buildFlipCard(),
+                      const SizedBox(height: 24),
+                      Text(
+                        'マッチング中${'.' * _dotCount}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (_matchingHint != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _matchingHint!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      CupertinoButton.filled(
+                        onPressed: _cancelMatch,
+                        child: const Text('キャンセル'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

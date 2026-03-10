@@ -11,11 +11,13 @@ import 'widgets/bottom_banner_ad.dart';
 const String _defaultBackgroundImage = 'assets/image_dir/main_visual.jpg';
 const String _mapModeBackgroundImage = 'assets/image_dir/long_hair.jpg';
 const String _versusModeBackgroundImage = 'assets/image_dir/short_hair.jpg';
+const String _versusSubModeBackgroundImage = 'assets/image_dir/background.jpg';
 
 const List<String> _modeBackgroundImages = <String>[
   _defaultBackgroundImage,
   _mapModeBackgroundImage,
   _versusModeBackgroundImage,
+  _versusSubModeBackgroundImage,
 ];
 
 enum _MenuPage { top, map, versus }
@@ -83,6 +85,12 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
     setState(() {
       _currentPage = _MenuPage.top;
     });
+  }
+
+  Future<void> _pushNamedAfterBackgroundReady(String routeName) async {
+    await (_precacheFuture ??= _precacheBackgroundImages());
+    if (!mounted) return;
+    Navigator.pushNamed(context, routeName);
   }
 
   @override
@@ -211,10 +219,7 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               onTap: () {
                 InterstitialAdManager.show(
                   onFinished: () {
-                    Navigator.pushReplacementNamed(
-                      context,
-                      AppRoutes.versusLobby,
-                    );
+                    _pushNamedAfterBackgroundReady(AppRoutes.versusLobby);
                   },
                 );
               },
@@ -228,10 +233,7 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               onTap: () {
                 InterstitialAdManager.show(
                   onFinished: () {
-                    Navigator.pushReplacementNamed(
-                      context,
-                      AppRoutes.versusPublicWait,
-                    );
+                    _pushNamedAfterBackgroundReady(AppRoutes.versusPublicWait);
                   },
                 );
               },
