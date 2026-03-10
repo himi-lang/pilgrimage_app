@@ -80,14 +80,6 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final clampedMedia = media.copyWith(
-      textScaler: media.textScaler.clamp(
-        minScaleFactor: 1.0,
-        maxScaleFactor: 1.2,
-      ),
-    );
-
     final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
       fontSize: 16,
       fontWeight: FontWeight.w600,
@@ -98,79 +90,76 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
       color: CupertinoColors.systemGrey,
     );
 
-    return MediaQuery(
-      data: clampedMedia,
-      child: CupertinoPageScaffold(
-        navigationBar: commonAppBar(
-          context,
-          title: '対戦ロビー',
-          currentMode: AppMode.versus,
-          leading: AppBackButton(
-            onPressed: () {
-              Navigator.of(context).pushNamedAndRemoveUntil(
-                AppRoutes.modeSelection,
-                (route) => false,
-              );
-            },
+    return CupertinoPageScaffold(
+      navigationBar: commonAppBar(
+        context,
+        title: '対戦ロビー',
+        currentMode: AppMode.versus,
+        leading: AppBackButton(
+          onPressed: () {
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              AppRoutes.modeSelection,
+              (route) => false,
+            );
+          },
+        ),
+      ),
+      child: Container(
+        // ★ 背景画像
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/image_dir/background.jpg'),
+            fit: BoxFit.cover,
           ),
         ),
+        // 背景の上にうっすら白をかぶせて内容を載せる
         child: Container(
-          // ★ 背景画像
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage('assets/image_dir/long_hair.jpg'),
-              fit: BoxFit.cover,
-            ),
-          ),
-          // 背景の上にうっすら白をかぶせて内容を載せる
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white.withValues(alpha: 0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                CupertinoButton.filled(
-                  onPressed: _busy ? null : _quickMatch,
-                  child: Text(_busy ? '接続中…' : 'クイックマッチ'),
-                ),
-                const Divider(height: 32),
-                Text('プライベートマッチ', style: titleStyle),
-                const SizedBox(height: 8),
-                CupertinoButton(
-                  onPressed: _busy ? null : _createPrivate,
-                  color: CupertinoColors.systemGrey5,
-                  child: const Text('部屋を作る'),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 44,
-                        child: CupertinoTextField(
-                          controller: codeCtrl,
-                          style: fieldStyle,
-                          placeholderStyle: placeholderStyle,
-                          maxLines: 1,
-                          textCapitalization: TextCapitalization.characters,
-                          placeholder: '招待コード6桁',
-                          autocorrect: false,
-                        ),
+          padding: const EdgeInsets.all(16),
+          color: Colors.white.withValues(alpha: 0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CupertinoButton.filled(
+                onPressed: _busy ? null : _quickMatch,
+                child: Text(_busy ? '接続中…' : 'クイックマッチ'),
+              ),
+              const Divider(height: 32),
+              Text('プライベートマッチ', style: titleStyle),
+              const SizedBox(height: 8),
+              CupertinoButton(
+                onPressed: _busy ? null : _createPrivate,
+                color: CupertinoColors.systemGrey5,
+                child: const Text('部屋を作る'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: CupertinoTextField(
+                        controller: codeCtrl,
+                        style: fieldStyle,
+                        placeholderStyle: placeholderStyle,
+                        maxLines: 1,
+                        textCapitalization: TextCapitalization.characters,
+                        placeholder: '招待コード6桁',
+                        autocorrect: false,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    CupertinoButton.filled(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      minimumSize: const Size(44, 44),
-                      onPressed: _busy ? null : _joinByCode,
-                      child: const Text('参加'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  const SizedBox(width: 8),
+                  CupertinoButton.filled(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    minimumSize: const Size(44, 44),
+                    onPressed: _busy ? null : _joinByCode,
+                    child: const Text('参加'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

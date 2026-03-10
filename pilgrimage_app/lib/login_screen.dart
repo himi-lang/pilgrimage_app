@@ -115,13 +115,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final clampedMedia = media.copyWith(
-      textScaler: media.textScaler.clamp(
-        minScaleFactor: 1.0,
-        maxScaleFactor: 1.15,
-      ),
-    );
     const labelStyle = TextStyle(
       fontSize: 16,
       color: CupertinoColors.black,
@@ -142,112 +135,107 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     final title = _isSignUp ? '新規登録' : 'ログイン';
-    return MediaQuery(
-      data: clampedMedia,
-      child: CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(
-          middle: Text(
-            title,
-            style: const TextStyle(color: CupertinoColors.white),
-          ),
-          backgroundColor: CupertinoTheme.of(context).primaryColor,
-          automaticBackgroundVisibility: false,
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          title,
+          style: const TextStyle(color: CupertinoColors.white),
         ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset('assets/image_dir/test1.jpg', fit: BoxFit.cover),
-            Container(color: Colors.white.withValues(alpha: 0.86)),
-            SafeArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text('メールアドレス', style: labelStyle),
-                        const SizedBox(height: 6),
-                        CupertinoTextField(
-                          controller: _email,
-                          keyboardType: TextInputType.emailAddress,
-                          placeholder: 'example@example.com',
-                          placeholderStyle: placeholderStyle,
-                          style: fieldStyle,
-                          enabled: !_busy,
-                          autocorrect: false,
+        backgroundColor: CupertinoTheme.of(context).primaryColor,
+        automaticBackgroundVisibility: false,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset('assets/image_dir/background.jpg', fit: BoxFit.cover),
+          Container(color: Colors.white.withValues(alpha: 0.86)),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('メールアドレス', style: labelStyle),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        placeholder: 'example@example.com',
+                        placeholderStyle: placeholderStyle,
+                        style: fieldStyle,
+                        enabled: !_busy,
+                        autocorrect: false,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('パスワード（6文字以上）', style: labelStyle),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        controller: _pass,
+                        obscureText: _obscure,
+                        placeholderStyle: placeholderStyle,
+                        style: fieldStyle,
+                        enabled: !_busy,
+                        autocorrect: false,
+                        suffix: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                          minimumSize: Size(30, 30),
+                          child: Icon(
+                            _obscure
+                                ? CupertinoIcons.eye
+                                : CupertinoIcons.eye_slash,
+                            size: 20,
+                          ),
                         ),
+                      ),
+                      if (_isSignUp) ...[
                         const SizedBox(height: 12),
-                        const Text('パスワード（6文字以上）', style: labelStyle),
+                        const Text('表示名（任意）', style: labelStyle),
                         const SizedBox(height: 6),
                         CupertinoTextField(
-                          controller: _pass,
-                          obscureText: _obscure,
+                          controller: _name,
                           placeholderStyle: placeholderStyle,
                           style: fieldStyle,
                           enabled: !_busy,
                           autocorrect: false,
-                          suffix: CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            onPressed:
-                                () => setState(() => _obscure = !_obscure),
-                            minimumSize: Size(30, 30),
-                            child: Icon(
-                              _obscure
-                                  ? CupertinoIcons.eye
-                                  : CupertinoIcons.eye_slash,
-                              size: 20,
-                            ),
-                          ),
                         ),
-                        if (_isSignUp) ...[
-                          const SizedBox(height: 12),
-                          const Text('表示名（任意）', style: labelStyle),
-                          const SizedBox(height: 6),
-                          CupertinoTextField(
-                            controller: _name,
-                            placeholderStyle: placeholderStyle,
-                            style: fieldStyle,
-                            enabled: !_busy,
-                            autocorrect: false,
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        CupertinoButton.filled(
-                          onPressed: _busy ? null : _handleEmail,
-                          child: Text(title),
-                        ),
-                        const SizedBox(height: 8),
-                        CupertinoButton(
-                          onPressed: _busy ? null : _handleGoogle,
-                          child: const Text('Googleで続ける'),
-                        ),
-                        const SizedBox(height: 8),
-                        CupertinoButton(
-                          onPressed:
-                              _busy
-                                  ? null
-                                  : () =>
-                                      setState(() => _isSignUp = !_isSignUp),
-                          child: Text(
-                            _isSignUp
-                                ? '既にアカウントをお持ちの方（ログインへ）'
-                                : 'アカウントをお持ちでない方（新規登録へ）',
-                          ),
-                        ),
-                        if (_busy) ...[
-                          const SizedBox(height: 16),
-                          const Center(child: CupertinoActivityIndicator()),
-                        ],
                       ],
-                    ),
+                      const SizedBox(height: 16),
+                      CupertinoButton.filled(
+                        onPressed: _busy ? null : _handleEmail,
+                        child: Text(title),
+                      ),
+                      const SizedBox(height: 8),
+                      CupertinoButton(
+                        onPressed: _busy ? null : _handleGoogle,
+                        child: const Text('Googleで続ける'),
+                      ),
+                      const SizedBox(height: 8),
+                      CupertinoButton(
+                        onPressed:
+                            _busy
+                                ? null
+                                : () => setState(() => _isSignUp = !_isSignUp),
+                        child: Text(
+                          _isSignUp
+                              ? '既にアカウントをお持ちの方（ログインへ）'
+                              : 'アカウントをお持ちでない方（新規登録へ）',
+                        ),
+                      ),
+                      if (_busy) ...[
+                        const SizedBox(height: 16),
+                        const Center(child: CupertinoActivityIndicator()),
+                      ],
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

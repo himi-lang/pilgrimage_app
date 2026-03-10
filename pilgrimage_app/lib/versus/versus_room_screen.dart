@@ -8,7 +8,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 import '../app_routes.dart';
-import '../mode_selection_screen.dart';
 import '../widgets/app_ui.dart';
 import '../service/spot_image.dart';
 import 'versus_service.dart';
@@ -131,10 +130,9 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   Future<void> _goLobby() async {
     await _svc.leaveRoom(widget.roomId);
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      CupertinoPageRoute(builder: (_) => const VersusModeMenuScreen()),
-      (_) => false,
-    );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.modeSelection, (_) => false);
   }
 
   // ===== スコア/解答のクリア（再戦開始時に使用） =====

@@ -1,33 +1,267 @@
-// lib/mode_selection_screen.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'widgets/app_ui.dart';
-import 'map_screen.dart';
-import 'image_search_screen.dart';
-import 'widgets/bottom_banner_ad.dart';
+
 import 'ads/interstitial_ad_manager.dart';
+import 'app_routes.dart';
+import 'image_search_screen.dart';
+import 'map_screen.dart';
+import 'widgets/app_ui.dart';
+import 'widgets/bottom_banner_ad.dart';
 
-const String _defaultBackgroundImage = 'assets/image_dir/キービジュアル.jpg';
-const String _mapModeBackgroundImage = 'assets/image_dir/ロング背景.jpg';
-const String _versusModeBackgroundImage = 'assets/image_dir/ショート背景.jpg';
+const String _defaultBackgroundImage = 'assets/image_dir/main_visual.jpg';
+const String _mapModeBackgroundImage = 'assets/image_dir/long_hair.jpg';
+const String _versusModeBackgroundImage = 'assets/image_dir/short_hair.jpg';
 
-Widget backGround(
-  Widget child, {
-  double overlayAlpha = 0.82,
-  String imagePath = _defaultBackgroundImage, //背景画像
-}) {
-  return Container(
-    decoration: BoxDecoration(
-      image: DecorationImage(image: AssetImage(imagePath), fit: BoxFit.cover),
-    ),
-    child: Container(
-      color: Colors.white.withValues(alpha: overlayAlpha),
-      child: child,
-    ),
-  );
+const List<String> _modeBackgroundImages = <String>[
+  _defaultBackgroundImage,
+  _mapModeBackgroundImage,
+  _versusModeBackgroundImage,
+];
+
+enum _MenuPage { top, map, versus }
+
+class ModeSelectionScreen extends StatefulWidget {
+  const ModeSelectionScreen({super.key});
+
+  @override
+  State<ModeSelectionScreen> createState() => _ModeSelectionScreenState();
+}
+
+class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
+  Future<void>? _precacheFuture;
+  _MenuPage _currentPage = _MenuPage.top;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheFuture ??= _precacheBackgroundImages();
+  }
+
+  Future<void> _precacheBackgroundImages() async {
+    for (final imagePath in _modeBackgroundImages) {
+      await precacheImage(AssetImage(imagePath), context);
+    }
+  }
+
+  String get _currentBackgroundPath {
+    switch (_currentPage) {
+      case _MenuPage.top:
+        return _defaultBackgroundImage;
+      case _MenuPage.map:
+        return _mapModeBackgroundImage;
+      case _MenuPage.versus:
+        return _versusModeBackgroundImage;
+    }
+  }
+
+  String get _currentTitle {
+    switch (_currentPage) {
+      case _MenuPage.top:
+        return 'Anime Atlas';
+      case _MenuPage.map:
+        return '聖地マップモード';
+      case _MenuPage.versus:
+        return '対戦モード';
+    }
+  }
+
+  bool get _showBackButton => _currentPage != _MenuPage.top;
+
+  Future<void> _switchPage(_MenuPage nextPage) async {
+    await (_precacheFuture ??= _precacheBackgroundImages());
+    if (!mounted) return;
+    setState(() {
+      _currentPage = nextPage;
+    });
+  }
+
+  void _handleBack() {
+    if (_currentPage == _MenuPage.top) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _currentPage = _MenuPage.top;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        automaticallyImplyLeading: false,
+        leading: _showBackButton ? AppBackButton(onPressed: _handleBack) : null,
+        middle: Text(
+          _currentTitle,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: cs.primary,
+        automaticBackgroundVisibility: false,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_currentPage == _MenuPage.map)
+              const ModeSwitchButton(currentMode: AppMode.map),
+            AppMenuButton(),
+          ],
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _AnimatedBackground(
+            imagePath: _currentBackgroundPath,
+            overlayAlpha: 0,
+          ),
+          Material(
+            color: Colors.transparent,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 40),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 720),
+                        child: RepaintBoundary(
+                          child: KeyedSubtree(
+                            key: ValueKey(_currentPage),
+                            child: _buildPageBody(cs),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const BottomBannerAd(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPageBody(ColorScheme cs) {
+    switch (_currentPage) {
+      case _MenuPage.top:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModeMenuCard(
+              icon: Icons.map,
+              title: '聖地マップモード',
+              subtitle: '地図で探す・作品から探す',
+              backgroundColor: cs.surface,
+              onTap: () => _switchPage(_MenuPage.map),
+            ),
+            const SizedBox(height: 16),
+            _ModeMenuCard(
+              icon: Icons.sports_esports,
+              title: '対戦モード',
+              subtitle: '早押しクイズ：みんなと / プライベート',
+              backgroundColor: cs.surface,
+              onTap: () => _switchPage(_MenuPage.versus),
+            ),
+          ],
+        );
+
+      case _MenuPage.map:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModeMenuCard(
+              icon: Icons.map_outlined,
+              title: '地図から探す',
+              subtitle: '地図からスポットを発見・検索',
+              backgroundColor: cs.surfaceContainer,
+              onTap: () {
+                Navigator.of(
+                  context,
+                ).push(CupertinoPageRoute(builder: (_) => const MapScreen()));
+              },
+            ),
+            const SizedBox(height: 16),
+            _ModeMenuCard(
+              icon: Icons.image_search,
+              title: '作品から探す',
+              subtitle: 'アニメ作品を検索・タップ',
+              backgroundColor: cs.surfaceContainer,
+              onTap: () {
+                Navigator.of(context).push(
+                  CupertinoPageRoute(builder: (_) => const ImageSearchScreen()),
+                );
+              },
+            ),
+          ],
+        );
+
+      case _MenuPage.versus:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModeMenuCard(
+              icon: Icons.lock,
+              title: 'プライベート対戦',
+              subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
+              backgroundColor: cs.surfaceContainer,
+              onTap: () {
+                InterstitialAdManager.show(
+                  onFinished: () {
+                    Navigator.pushReplacementNamed(
+                      context,
+                      AppRoutes.versusLobby,
+                    );
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _ModeMenuCard(
+              icon: Icons.group,
+              title: 'みんなと対戦',
+              subtitle: '全国のユーザーとランダムマッチ',
+              backgroundColor: cs.surfaceContainer,
+              onTap: () {
+                InterstitialAdManager.show(
+                  onFinished: () {
+                    Navigator.pushReplacementNamed(
+                      context,
+                      AppRoutes.versusPublicWait,
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        );
+    }
+  }
+}
+
+class _AnimatedBackground extends StatelessWidget {
+  final String imagePath;
+  final double overlayAlpha;
+
+  const _AnimatedBackground({required this.imagePath, this.overlayAlpha = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E456E),
+        image: DecorationImage(image: AssetImage(imagePath), fit: BoxFit.cover),
+      ),
+      child: ColoredBox(color: Colors.white.withValues(alpha: overlayAlpha)),
+    );
+  }
 }
 
 class _ModeMenuCard extends StatelessWidget {
+  //押せるカードの型
   final IconData icon;
   final String title;
   final String subtitle;
@@ -44,303 +278,63 @@ class _ModeMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: backgroundColor,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 40, color: CupertinoColors.white),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: CupertinoColors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: CupertinoColors.white),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              CupertinoIcons.chevron_right,
-              color: CupertinoColors.white,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ModeSelectionScreen extends StatelessWidget {
-  const ModeSelectionScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    //ここから画面の形を作っていく。widget buildに返す。
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        automaticallyImplyLeading: false,
-        middle: Text(
-          'Anime Atlas',
-          style: TextStyle(color: CupertinoColors.white),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        automaticBackgroundVisibility: false,
-        trailing: AppMenuButton(),
-      ),
-      child: backGround(
-        Material(
-          color: Colors.transparent,
-          child: Column(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: backgroundColor,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              Icon(icon, size: 36, color: CupertinoColors.white),
+              const SizedBox(width: 16),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // ★ 聖地マップモード → マップ用サブメニュー
-                          _ModeMenuCard(
-                            icon: Icons.map,
-                            title: '聖地マップモード',
-                            subtitle: '地図で探す・作品から探す',
-                            backgroundColor: cs.surface,
-                            onTap: () {
-                              //on_clickedと同じ
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (_) => const MapModeMenuScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          // ★ 対戦モード → 対戦モード用サブメニュー
-                          _ModeMenuCard(
-                            icon: Icons.sports_esports,
-                            title: '対戦モード',
-                            subtitle: '早押しクイズ：みんなと / プライベート',
-                            backgroundColor: cs.surface,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (_) => const VersusModeMenuScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      //メインの文字（聖地マップモードとか）
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: CupertinoColors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Text(
+                      //下にある小さい文字
+                      subtitle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: CupertinoColors.white,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const BottomBannerAd(),
+              const SizedBox(width: 8),
+              const Icon(
+                //右端に入れる矢印アイコン
+                CupertinoIcons.chevron_right,
+                color: CupertinoColors.white,
+                size: 24,
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// マップモード内のサブメニュー
-class MapModeMenuScreen extends StatelessWidget {
-  //聖地マップモード選択画面
-  const MapModeMenuScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return CupertinoPageScaffold //聖地マップモードの選択画面の本体。
-    (
-      navigationBar: CupertinoNavigationBar(
-        automaticallyImplyLeading: false,
-        leading:
-            const AppBackButton(), //純正の戻るボタンに白色つけたらバグがあった。詳細はapp=ui.dartに記載されている。
-        middle: const Text(
-          '聖地マップモード',
-          style: TextStyle(color: CupertinoColors.white),
-        ),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        automaticBackgroundVisibility: false,
-        trailing: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ModeSwitchButton(currentMode: AppMode.map),
-            AppMenuButton(),
-          ],
-        ),
-      ),
-      child: backGround(
-        Material //ここからappBarから下の箱
-        (
-          color: Colors.transparent,
-          child: Column(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ModeMenuCard(
-                            icon: Icons.map_outlined,
-                            title: '地図から探す',
-                            subtitle: '地図からスポットを発見・検索',
-                            backgroundColor: cs.surfaceContainer,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (_) => const MapScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _ModeMenuCard(
-                            icon: Icons.image_search,
-                            title: '作品から探す',
-                            subtitle: 'アニメ作品を検索・タップ',
-                            backgroundColor: cs.surfaceContainer,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (_) => const ImageSearchScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const BottomBannerAd(),
-            ],
-          ),
-        ),
-        imagePath: _mapModeBackgroundImage,
-      ),
-    );
-  }
-}
-
-/// 対戦モード内のサブメニュー
-/// ボタン1: プライベート対戦
-/// ボタン2: みんなと対戦
-class VersusModeMenuScreen extends StatelessWidget {
-  //対戦モードの画面を作成している。
-  const VersusModeMenuScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return CupertinoPageScaffold(
-      navigationBar: commonAppBar(
-        context,
-        title: '対戦モード',
-        leading: AppBackButton(
-          onPressed: () {
-            final nav = Navigator.of(context);
-            if (nav.canPop()) {
-              nav.pop();
-              return;
-            }
-            nav.pushNamedAndRemoveUntil('/mode_selection', (route) => false);
-          },
-        ),
-        // AppMode に versus があれば渡してもOK
-        // currentMode: AppMode.versus,
-      ),
-      child: backGround(
-        Material(
-          color: Colors.transparent,
-          child: Column(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // ボタン1：プライベート対戦
-                          _ModeMenuCard(
-                            icon: Icons.lock,
-                            title: 'プライベート対戦',
-                            subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
-                            backgroundColor: cs.surfaceContainer,
-                            onTap: () {
-                              InterstitialAdManager.show(
-                                onFinished: () {
-                                  Navigator.pushReplacementNamed(
-                                    context,
-                                    '/versus/lobby',
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          // ボタン2：みんなと対戦
-                          _ModeMenuCard(
-                            icon: Icons.group,
-                            title: 'みんなと対戦',
-                            subtitle: '全国のユーザーとランダムマッチ',
-                            backgroundColor: cs.surfaceContainer,
-                            onTap: () {
-                              InterstitialAdManager.show(
-                                onFinished: () {
-                                  Navigator.pushReplacementNamed(
-                                    context,
-                                    '/versus/public_wait',
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const BottomBannerAd(),
-            ],
-          ),
-        ),
-        imagePath: _versusModeBackgroundImage,
       ),
     );
   }

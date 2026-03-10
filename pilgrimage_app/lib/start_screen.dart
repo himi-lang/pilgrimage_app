@@ -24,13 +24,13 @@ class _StartScreenState extends State<StartScreen> {
 
   @override
   void initState() {
-    super.initState();
+    super.initState(); //音楽はじめる
     _player = AudioPlayer();
   }
 
   @override
   void dispose() {
-    _player.dispose();
+    _player.dispose(); //音楽とめる
     super.dispose();
   }
 
@@ -97,7 +97,10 @@ class _StartScreenState extends State<StartScreen> {
             fit: StackFit.expand,
             children: [
               // 背景画像
-              Image.asset('assets/image_dir/キービジュアル.jpg', fit: BoxFit.cover),
+              Image.asset(
+                'assets/image_dir/main_visual.jpg',
+                fit: BoxFit.cover,
+              ),
 
               BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
@@ -106,7 +109,7 @@ class _StartScreenState extends State<StartScreen> {
 
               Center(
                 child: Image.asset(
-                  "assets/image_dir/キービジュアル.jpg",
+                  "assets/image_dir/main_visual.jpg",
                   fit: BoxFit.contain,
                 ),
               ),
