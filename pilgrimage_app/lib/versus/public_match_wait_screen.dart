@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../app_routes.dart';
@@ -213,9 +212,9 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
           constraints: const BoxConstraints(maxWidth: 360, minHeight: 220),
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6,
+            color: const Color(0xFFF2F2F7),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: CupertinoColors.systemGrey3),
+            border: Border.all(color: const Color(0xFFC7C7CC)),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x22000000),
@@ -227,7 +226,11 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
           child: Center(
             child:
                 _quoteLoading
-                    ? const CupertinoActivityIndicator()
+                    ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    )
                     : Text(
                       faceText,
                       textAlign: TextAlign.center,
@@ -251,18 +254,20 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
         if (didPop) return;
         await _cancelMatch();
       },
-      child: CupertinoPageScaffold(
-        navigationBar: commonAppBar(
-          context,
-          title: '対戦待機',
-          currentMode: AppMode.versus,
-          leading: AppBackButton(
-            onPressed: () {
-              _cancelMatch();
-            },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('対戦待機'),
+          leading: IconButton(
+            onPressed: _cancelMatch,
+            icon: const Icon(Icons.arrow_back),
           ),
+          actions: const [
+            ModeSwitchButton(currentMode: AppMode.versus),
+            AppMenuButton(),
+          ],
         ),
-        child: Stack(
+        body: Stack(
           fit: StackFit.expand,
           children: [
             Container(
@@ -311,7 +316,7 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
                         ),
                       ],
                       const SizedBox(height: 20),
-                      CupertinoButton.filled(
+                      FilledButton(
                         onPressed: _cancelMatch,
                         child: const Text('キャンセル'),
                       ),
