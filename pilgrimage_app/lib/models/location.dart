@@ -40,4 +40,19 @@ class LocationData {
       workTitle: (data['workTitle'] ?? '').toString(),
     );
   }
+
+  String get displayWorkTitle {
+    final title = workTitle.trim();
+    return title.isEmpty ? '作品名未設定' : title;
+  }
+
+  String get detailText {
+    final trimmedAddress = address.trim();
+    if (trimmedAddress.isNotEmpty) return trimmedAddress;
+    return description.trim();
+  }
+
+  List<String> get searchableFields {
+    return <String>[name, address, description, workTitle];
+  }
 }

@@ -13,7 +13,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_service.dart';
 import './models/location.dart';
+import 'app_routes.dart';
 import 'service/commons_image_service.dart';
+import 'service/location_search_service.dart';
 import 'widgets/app_ui.dart';
 import 'widgets/dialogs.dart';
 
@@ -47,7 +49,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   LocationData? _selected;
 
   // 現在地
-  LatLng? _userLatLng;
   bool _triedStartFromUser = false;
 
   // 中断/再開（復元用）
@@ -60,6 +61,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   // Firestore
   late final Stream<List<LocationData>> _locationsStream;
+  final LocationSearchService _locationSearchService =
+      const LocationSearchService();
   List<LocationData> _all = [];
   final CommonsImageService _commonsImageService = CommonsImageService();
   final Map<String, Future<List<String>>> _imageCandidatesCache = {};
@@ -148,38 +151,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   static const double _hitZoom = 16.0;
 
-  // --- 文字正規化 + 検索 ---
-  String _normalize(String s) {
-    final runes = s
-        .trim()
-        .toLowerCase()
-        .runes
-        .map((r) {
-          if (r >= 0xFF01 && r <= 0xFF5E) return r - 0xFEE0; // 全角→半角
-          if (r >= 0x30A1 && r <= 0x30F6) return r - 0x60; // ｶﾅ→ひらがな
-          return r;
-        })
-        .where((r) {
-          const drops = [0x0020, 0x3000, 0x3001, 0x3002];
-          return !drops.contains(r);
-        });
-    return String.fromCharCodes(runes);
-  }
-
-  bool _match(LocationData d, String q) {
-    if (q.isEmpty) return true;
-    final nq = _normalize(q);
-    bool contains(String x) => _normalize(x).contains(nq);
-    return contains(d.name) ||
-        contains(d.address) ||
-        contains(d.description) ||
-        contains(d.workTitle);
-  }
-
   List<LocationData> _filter(List<LocationData> list, String q) {
-    final qs = q.trim();
-    if (qs.isEmpty) return list;
-    return list.where((d) => _match(d, qs)).toList();
+    return _locationSearchService.filterLocations(list, q);
   }
 
   // --- 地図操作 ---
@@ -286,7 +259,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     if (loc != null) {
-      _userLatLng = loc;
       _initialFitDone = true;
       await _goToLatLng(loc, zoom: 15);
       setState(() {}); // 青点の見た目更新
@@ -602,7 +574,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildSpotDescription(LocationData d) {
-    final desc = (d.description ?? '').trim();
+    final desc = d.description.trim();
     if (desc.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -793,35 +765,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  Widget _buildZoomButtons() {
+  Widget _buildVisitedRecordButton() {
     return SafeArea(
       child: Align(
-        alignment: Alignment.bottomRight,
+        alignment: Alignment.bottomLeft,
         child: Padding(
-          padding: const EdgeInsets.only(right: 12, bottom: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingActionButton.small(
-                heroTag: 'zoom_in',
-                onPressed: () async {
-                  final c = await _controller();
-                  final current = await c.getZoomLevel();
-                  await c.animateCamera(CameraUpdate.zoomTo(current + 1));
-                },
-                child: const Icon(Icons.add),
-              ),
-              const SizedBox(height: 8),
-              FloatingActionButton.small(
-                heroTag: 'zoom_out',
-                onPressed: () async {
-                  final c = await _controller();
-                  final current = await c.getZoomLevel();
-                  await c.animateCamera(CameraUpdate.zoomTo(current - 1));
-                },
-                child: const Icon(Icons.remove),
-              ),
-            ],
+          padding: const EdgeInsets.only(left: 12, bottom: 20),
+          child: MapCornerShortcutButton(
+            icon: CupertinoIcons.check_mark_circled_solid,
+            label: '制覇記録',
+            onPressed: () {
+              Navigator.of(context).pushNamed(AppRoutes.visitedSpots);
+            },
           ),
         ),
       ),
@@ -981,8 +936,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   rotateGesturesEnabled: true,
                   markers: markers,
                   onTap: (_) {
-                    if (_showCandidates)
+                    if (_showCandidates) {
                       setState(() => _showCandidates = false);
+                    }
                   },
                   onCameraMove: (pos) => _lastCamera = pos,
                   onCameraIdle: () {
@@ -997,7 +953,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
                 // 候補パネルは candidates を表示
                 _buildCandidatePanel(candidates),
-                _buildZoomButtons(),
+                _buildVisitedRecordButton(),
                 _buildSelectedCard(),
 
                 if (isUpdating)

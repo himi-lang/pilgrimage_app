@@ -8,6 +8,7 @@ import 'start_screen.dart';
 import 'login_screen.dart';
 import 'mode_selection_screen.dart';
 import 'map_screen.dart';
+import 'visited_pilgrimage_screen.dart';
 import 'app_routes.dart';
 import 'versus/versus_lobby_screen.dart';
 import 'versus/public_match_wait_screen.dart';
@@ -99,6 +100,7 @@ class MyApp extends StatelessWidget {
         AppRoutes.login: (_) => const LoginScreen(),
         AppRoutes.modeSelection: (_) => const ModeSelectionScreen(),
         AppRoutes.map: (_) => const MapScreen(),
+        AppRoutes.visitedSpots: (_) => const VisitedPilgrimageScreen(),
         AppRoutes.versusLobby: (_) => const VersusLobbyScreen(),
         AppRoutes.versusPublicWait: (_) => const PublicMatchWaitScreen(),
       },
