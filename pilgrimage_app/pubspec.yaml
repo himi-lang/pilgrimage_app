@@ -1,11 +1,11 @@
 name: pilgrimage_app
 description: "A new Flutter project."
-publish_to: 'none'
+publish_to: "none"
 
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.7.0 <4.0.0'
+  sdk: ">=3.7.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -34,14 +34,13 @@ dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  
-  image_path: "assets/image_dir/app_icon.png"
+
+  image_path: "assets/image_dir/anime_atlas_icon.png"
 
   #image_path_ios: ""
-  adaptive_icon_background: "assets/image_dir/Layer_back2.png"
-  adaptive_icon_foreground: "assets/image_dir/Layer_front.png"
+  adaptive_icon_background: "assets/image_dir/anime_atlas_back.png"
+  adaptive_icon_foreground: "assets/image_dir/anime_atlas_front.png"
   remove_alpha_ios: true
-
 
 flutter:
   uses-material-design: true

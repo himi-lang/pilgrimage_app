@@ -6,11 +6,10 @@ class InterstitialAdManager {
   static InterstitialAd? _ad;
   static bool _isLoading = false;
 
-  // ★ テスト用ユニット ID（Android）
+  // テスト用ユニット ID（Android）
   static const String _testInterstitialAndroid =
       'ca-app-pub-3940256099942544/1033173712';
 
-  // 必要なら iOS 用も用意しておく
   static const String _testInterstitialIOS =
       'ca-app-pub-3940256099942544/4411468910';
 

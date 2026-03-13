@@ -45,6 +45,10 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
     }
   }
 
+  Future<void> _precacheOne(String imagePath) async {
+    await precacheImage(AssetImage(imagePath), context);
+  }
+
   String get _currentBackgroundPath {
     switch (_currentPage) {
       case _MenuPage.top:
@@ -72,6 +76,7 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
   Future<void> _switchPage(_MenuPage nextPage) async {
     await (_precacheFuture ??= _precacheBackgroundImages());
     if (!mounted) return;
+
     setState(() {
       _currentPage = nextPage;
     });
@@ -82,15 +87,30 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
       Navigator.of(context).maybePop();
       return;
     }
+
     setState(() {
       _currentPage = _MenuPage.top;
     });
   }
 
-  Future<void> _pushNamedAfterBackgroundReady(String routeName) async {
-    await (_precacheFuture ??= _precacheBackgroundImages());
+  Future<void> _pushAfterPrecaching({
+    required String imagePath,
+    required Widget page,
+  }) async {
+    await _precacheOne(imagePath);
     if (!mounted) return;
-    Navigator.pushNamed(context, routeName);
+
+    await Navigator.of(context).push(CupertinoPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _pushNamedAfterBackgroundReady({
+    required String routeName,
+    required String imagePath,
+  }) async {
+    await _precacheOne(imagePath);
+    if (!mounted) return;
+
+    await Navigator.pushNamed(context, routeName);
   }
 
   @override
@@ -119,9 +139,15 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          _AnimatedBackground(
-            imagePath: _currentBackgroundPath,
-            overlayAlpha: 0,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: SizedBox.expand(
+              key: ValueKey(_currentBackgroundPath),
+              child: _AnimatedBackground(
+                imagePath: _currentBackgroundPath,
+                overlayAlpha: 0,
+              ),
+            ),
           ),
           Material(
             color: Colors.transparent,
@@ -129,7 +155,7 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               children: [
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 16, 16, 40),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                     child: Align(
                       alignment: Alignment.bottomCenter,
                       child: ConstrainedBox(
@@ -187,9 +213,10 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               subtitle: '地図からスポットを発見・検索',
               backgroundColor: cs.surfaceContainer,
               onTap: () {
-                Navigator.of(
-                  context,
-                ).push(CupertinoPageRoute(builder: (_) => const MapScreen()));
+                _pushAfterPrecaching(
+                  imagePath: _mapModeBackgroundImage,
+                  page: const MapScreen(),
+                );
               },
             ),
             const SizedBox(height: 16),
@@ -199,8 +226,9 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               subtitle: 'アニメ作品を検索・タップ',
               backgroundColor: cs.surfaceContainer,
               onTap: () {
-                Navigator.of(context).push(
-                  CupertinoPageRoute(builder: (_) => const ImageSearchScreen()),
+                _pushAfterPrecaching(
+                  imagePath: _defaultBackgroundImage,
+                  page: const ImageSearchScreen(),
                 );
               },
             ),
@@ -219,7 +247,10 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               onTap: () {
                 InterstitialAdManager.show(
                   onFinished: () {
-                    _pushNamedAfterBackgroundReady(AppRoutes.versusLobby);
+                    _pushNamedAfterBackgroundReady(
+                      routeName: AppRoutes.versusLobby,
+                      imagePath: _versusSubModeBackgroundImage,
+                    );
                   },
                 );
               },
@@ -233,7 +264,10 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               onTap: () {
                 InterstitialAdManager.show(
                   onFinished: () {
-                    _pushNamedAfterBackgroundReady(AppRoutes.versusPublicWait);
+                    _pushNamedAfterBackgroundReady(
+                      routeName: AppRoutes.versusPublicWait,
+                      imagePath: _versusSubModeBackgroundImage,
+                    );
                   },
                 );
               },
@@ -252,18 +286,20 @@ class _AnimatedBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E456E),
-        image: DecorationImage(image: AssetImage(imagePath), fit: BoxFit.cover),
-      ),
-      child: ColoredBox(color: Colors.white.withValues(alpha: overlayAlpha)),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const ColoredBox(color: Color(0xFF1E456E)),
+        Image.asset(imagePath, fit: BoxFit.cover, gaplessPlayback: true),
+        ColoredBox(
+          color: CupertinoColors.white.withValues(alpha: overlayAlpha),
+        ),
+      ],
     );
   }
 }
 
 class _ModeMenuCard extends StatelessWidget {
-  //押せるカードの型
   final IconData icon;
   final String title;
   final String subtitle;
@@ -302,7 +338,6 @@ class _ModeMenuCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      //メインの文字（聖地マップモードとか）
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -314,7 +349,6 @@ class _ModeMenuCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      //下にある小さい文字
                       subtitle,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
@@ -329,7 +363,6 @@ class _ModeMenuCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               const Icon(
-                //右端に入れる矢印アイコン
                 CupertinoIcons.chevron_right,
                 color: CupertinoColors.white,
                 size: 24,

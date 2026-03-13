@@ -1,4 +1,5 @@
 // lib/widgets/bottom_banner_ad.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -16,14 +17,21 @@ class _BottomBannerAdState extends State<BottomBannerAd> {
   BannerAd? _bannerAd;
   bool _isLoaded = false;
 
+  String get _adUnitId {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return 'ca-app-pub-3940256099942544/2435281174';
+    }
+    return 'ca-app-pub-3940256099942544/9214589741';
+  }
+
   @override
   void initState() {
     super.initState();
 
     _bannerAd = BannerAd(
       size: AdSize.banner,
-      // ★ Android 用テストバナーの広告ユニットID
-      adUnitId: 'ca-app-pub-3940256099942544/6300978111',
+      // 分岐で得たプラットフォームのIDを入れる。
+      adUnitId: _adUnitId,
       listener: BannerAdListener(
         onAdLoaded: (ad) {
           setState(() => _isLoaded = true);
