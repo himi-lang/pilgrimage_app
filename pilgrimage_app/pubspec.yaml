@@ -49,3 +49,8 @@ flutter:
     - assets/information/
     - assets/image_dir/
     - assets/music_dir/
+
+  fonts:
+    - family: keifont
+      fonts:
+        - asset: assets/fonts/keifont.ttf

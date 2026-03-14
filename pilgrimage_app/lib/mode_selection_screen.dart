@@ -174,6 +174,13 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               ],
             ),
           ),
+          const VisitedRecordShortcut(
+            alignment: Alignment.topRight,
+            minimumPadding: EdgeInsets.only(top: 16, right: 16),
+            safeAreaTop: false,
+            safeAreaBottom: false,
+            safeAreaLeft: false,
+          ),
         ],
       ),
     );
@@ -192,7 +199,9 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               backgroundColor: cs.surface,
               onTap: () => _switchPage(_MenuPage.map),
             ),
+
             const SizedBox(height: 16),
+
             _ModeMenuCard(
               icon: Icons.sports_esports,
               title: '対戦モード',
@@ -299,6 +308,7 @@ class _AnimatedBackground extends StatelessWidget {
   }
 }
 
+//カードの中身を設定。
 class _ModeMenuCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -322,7 +332,7 @@ class _ModeMenuCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(19),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             color: backgroundColor,
@@ -331,7 +341,9 @@ class _ModeMenuCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(icon, size: 36, color: CupertinoColors.white),
+
               const SizedBox(width: 16),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,12 +354,14 @@ class _ModeMenuCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
+                        fontFamily: "keifont",
                         color: CupertinoColors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w100,
                       ),
                     ),
                     const SizedBox(height: 8),
+
                     Text(
                       subtitle,
                       maxLines: 3,

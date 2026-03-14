@@ -13,7 +13,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'firebase_service.dart';
 import './models/location.dart';
-import 'app_routes.dart';
 import 'service/commons_image_service.dart';
 import 'service/location_search_service.dart';
 import 'widgets/app_ui.dart';
@@ -765,24 +764,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  Widget _buildVisitedRecordButton() {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.bottomLeft,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 12, bottom: 20),
-          child: MapCornerShortcutButton(
-            icon: CupertinoIcons.check_mark_circled_solid,
-            label: '制覇記録',
-            onPressed: () {
-              Navigator.of(context).pushNamed(AppRoutes.visitedSpots);
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
   // --- マーカー間引き（軽量化） ---
   double _cellForZoom(double z) {
     if (z >= 17) return 0.0008; // ~80m
@@ -953,7 +934,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
                 // 候補パネルは candidates を表示
                 _buildCandidatePanel(candidates),
-                _buildVisitedRecordButton(),
+                const VisitedRecordShortcut(),
                 _buildSelectedCard(),
 
                 if (isUpdating)

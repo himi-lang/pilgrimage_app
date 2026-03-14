@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../mode_selection_screen.dart';
+import '../app_routes.dart';
 
 //ここでは、共通するUIのパーツを作成している。
 
@@ -123,6 +124,46 @@ class MapCornerShortcutButton extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class VisitedRecordShortcut extends StatelessWidget {
+  final Alignment alignment;
+  final EdgeInsets minimumPadding;
+  final bool safeAreaTop;
+  final bool safeAreaRight;
+  final bool safeAreaBottom;
+  final bool safeAreaLeft;
+
+  const VisitedRecordShortcut({
+    super.key,
+    this.alignment = Alignment.bottomLeft,
+    this.minimumPadding = const EdgeInsets.only(left: 12, bottom: 20),
+    this.safeAreaTop = true,
+    this.safeAreaRight = true,
+    this.safeAreaBottom = true,
+    this.safeAreaLeft = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: safeAreaTop,
+      right: safeAreaRight,
+      bottom: safeAreaBottom,
+      left: safeAreaLeft,
+      minimum: minimumPadding,
+      child: Align(
+        alignment: alignment,
+        child: MapCornerShortcutButton(
+          icon: CupertinoIcons.check_mark_circled_solid,
+          label: '制覇記録',
+          onPressed: () {
+            Navigator.of(context).pushNamed(AppRoutes.visitedSpots);
+          },
         ),
       ),
     );
