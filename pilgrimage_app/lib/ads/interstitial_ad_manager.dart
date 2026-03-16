@@ -1,4 +1,4 @@
-// lib/ads/interstitial_ad_manager.dart
+// lib/ads/interstitial_ad_manager.dartは広告の処理をしている。
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 

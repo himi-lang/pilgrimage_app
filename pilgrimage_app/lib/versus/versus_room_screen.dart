@@ -602,6 +602,7 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
     super.dispose();
   }
 
+  //bool ready が　falseならはじまrない
   Future<void> _setReady(bool ready) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
@@ -737,6 +738,7 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
                     onPressed:
                         status == 'waiting' ? () => _setReady(!myReady) : null,
                     child: Text(myReady ? '開始を取り消す' : '開始'),
+                    //myreadyがtrueなら開始を取り消す、そうでないなら開始にする。
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -826,6 +828,7 @@ class _FinishedPaneState extends State<_FinishedPane> {
     });
   }
 
+  //timerとwidgetをけしてメモリ還元
   @override
   void dispose() {
     _timer?.cancel();
@@ -862,7 +865,7 @@ class _FinishedPaneState extends State<_FinishedPane> {
                       label: Text(
                         widget.isPrivate
                             ? (_voted ? '再戦希望済み' : '再戦（全員で押す）')
-                            : '対戦モード選択へ戻る',
+                            : '戻る',
                       ),
                     ),
                   ),
@@ -881,14 +884,14 @@ class _FinishedPaneState extends State<_FinishedPane> {
                   const SizedBox(width: 6),
                   Text(
                     widget.isPrivate
-                        ? '$_remain s 内に全員が押したら再戦開始'
+                        ? '$_remain s 内に全員が押したら再戦'
                         : '$_remain s 後に対戦モード選択へ',
                   ),
                   const Spacer(),
                   OutlinedButton.icon(
                     onPressed: widget.onGoLobby,
                     icon: const Icon(Icons.home_outlined),
-                    label: const Text('対戦モード選択へ'),
+                    label: const Text('戻る'),
                   ),
                 ],
               ),

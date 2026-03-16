@@ -37,7 +37,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleEmail() async {
+    //メールアドレスに関する処理
     if (_email.text.trim().isEmpty || _pass.text.length < 6) {
+      //入力されたメールとパスワードが条件を満たさない時の処理。
       _toast('メールと6文字以上のパスワードを入力してください');
       return;
     }
