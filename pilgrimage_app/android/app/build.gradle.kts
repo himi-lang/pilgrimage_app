@@ -17,9 +17,15 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin") // Flutter は最後＆ここだけ
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
     // ★ google-services.json の package_name と合わせること
-    namespace = "com.example.pilgrimage_app"
+    namespace = "com.animeatlas.app"
 
     // Flutter プラグインが与える値をそのまま利用
     compileSdk = flutter.compileSdkVersion
@@ -27,7 +33,7 @@ android {
 
     defaultConfig {
         // ★ google-services.json の package_name と同一に
-        applicationId = "com.example.pilgrimage_app"
+        applicationId = "com.animeatlas.app"
 
         // 最近の Firebase は 23 推奨。flutter.minSdkVersion が 23 未満なら 23 に引き上げる
         minSdk = maxOf(flutter.minSdkVersion, 23)
@@ -46,10 +52,22 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+            val storeFilePath = keystoreProperties.getProperty("storeFile")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+            }
+            storePassword = keystoreProperties.getProperty("storePassword")
+        }
+    }
+    
     buildTypes {
         release {
-            // まずは debug 鍵でOK（後で本番鍵に差し替え）
-            signingConfig = signingConfigs.getByName("debug")
+            // まずは debug 鍵でOK（後で本番鍵releaseに差し替え）
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -71,7 +89,9 @@ flutter {
  * assembleDebug / packageDebug の存在や順序に依存せず、
  * ビルド終了時（成功時）に .apk を検出したらコピーします。
  */
-gradle.buildFinished {
+
+ /*
+ gradle.buildFinished {
     // appモジュール標準のAPK出力候補
     val candidates = listOf(
         layout.buildDirectory.dir("outputs/apk/debug").get().asFile,
@@ -104,3 +124,5 @@ gradle.buildFinished {
             "[post-copy] No APK found in: ${candidates.joinToString { it.absolutePath }}"
     )
 }
+
+*/

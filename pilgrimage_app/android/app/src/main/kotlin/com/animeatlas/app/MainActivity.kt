@@ -1,4 +1,4 @@
-package com.example.pilgrimage_app
+package com.animeatlas.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -39,8 +39,7 @@ class _StartScreenState extends State<StartScreen> {
     _isProcessing = true;
 
     // ① 効果音
-    _player.play(AssetSource('music_dir/yajuu_aaa.mp3')); //音源
-
+    //_player.play(AssetSource('music_dir/yajuu_aaa.mp3')); //音源
     // ② フェードアウト開始
     setState(() {
       _opacity = 0.0;

@@ -56,5 +56,6 @@
   "C_Cpp_Runner.showCompilationTime": false,
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
-  "cmake.sourceDirectory": "C:/Users/kamik/DOCUMENT/pilgrimage_app/pilgrimage_app/linux"
+  "cmake.sourceDirectory": "C:/Users/kamik/DOCUMENT/pilgrimage_app/pilgrimage_app/linux",
+  "java.configuration.updateBuildConfiguration": "interactive"
 }

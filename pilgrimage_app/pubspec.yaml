@@ -54,3 +54,5 @@ flutter:
     - family: keifont
       fonts:
         - asset: assets/fonts/keifont.ttf
+dev_dependencies:
+  change_app_package_name: ^1.5.0

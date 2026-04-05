@@ -17,6 +17,32 @@ const bool _MUTE_SNACK = true; // 画面下ログを抑制（true推奨）
 const int _REVEAL_HOLD_MS = 3000; // 正解公開→次問題までの待機(ms)
 const int _REMATCH_WINDOW_SEC = 10; // リザルトでの再戦投票受付(秒)
 
+String _trimmedText(dynamic value) => (value ?? '').toString().trim();
+
+String _normalizeWorkTitle(String value) =>
+    value.toLowerCase().replaceAll(RegExp(r'[\s　]+'), '');
+
+String _resolveWorkTitle(dynamic value, {required String fallback}) {
+  final title = _trimmedText(value);
+  if (title.isNotEmpty) return title;
+  return _trimmedText(fallback);
+}
+
+bool _sameWorkTitle(String left, String right) =>
+    _normalizeWorkTitle(left) == _normalizeWorkTitle(right);
+
+String _questionWorkTitle(Map<String, dynamic> question) => _resolveWorkTitle(
+  question['workTitle'],
+  fallback: _trimmedText(question['workKey']),
+);
+
+String _questionSignature(Map<String, dynamic> question) {
+  final id = _trimmedText(question['id']);
+  final name = _trimmedText(question['name']);
+  final workTitle = _questionWorkTitle(question);
+  return '$id|$name|$workTitle';
+}
+
 class VersusRoomScreen extends StatefulWidget {
   final String roomId;
   const VersusRoomScreen({super.key, required this.roomId});
@@ -55,8 +81,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
   @override
   void dispose() {
-    _autoAnsSub?.cancel();
-    _autoPlayersSub?.cancel();
+    _stopAutoAdvanceWatchers();
     _presenceTimer?.cancel();
     super.dispose();
   }
@@ -66,9 +91,22 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
       final ws = await _db.collection('聖地情報').get();
       setState(() {
         _globalWorkTitlePool =
-            ws.docs.map((d) => d.id).whereType<String>().toList();
+            ws.docs
+                .map((d) => _resolveWorkTitle(d.id, fallback: ''))
+                .where((title) => title.isNotEmpty)
+                .toList();
       });
     } catch (_) {}
+  }
+
+  void _stopAutoAdvanceWatchers() {
+    _autoAnsSub?.cancel();
+    _autoAnsSub = null;
+    _autoPlayersSub?.cancel();
+    _autoPlayersSub = null;
+    _playersCount = 0;
+    _watchingRound = null;
+    _advancedThisRound = false;
   }
 
   void _startPresenceHeartbeat() {
@@ -298,15 +336,23 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
         final localPool =
             qs
-                .map((e) => (e as Map)['workTitle'])
-                .whereType<String>()
+                .map(
+                  (e) =>
+                      _questionWorkTitle(Map<String, dynamic>.from(e as Map)),
+                )
+                .where((title) => title.isNotEmpty)
                 .toSet()
                 .toList();
         final workPool =
             _globalWorkTitlePool.isNotEmpty ? _globalWorkTitlePool : localPool;
 
-        if (status != 'waiting' && qs.isNotEmpty) {
+        if (status == 'playing' &&
+            qs.isNotEmpty &&
+            round >= 0 &&
+            round < qs.length) {
           _ensureAutoAdvance(widget.roomId, round);
+        } else {
+          _stopAutoAdvanceWatchers();
         }
 
         return WillPopScope(
@@ -394,8 +440,9 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                         roundStartedAt: roundStartedAt,
                         workPool: workPool,
                         onSubmit: (ans, timeMs, {bool timeUp = false}) async {
-                          final target =
-                              (qs[round]['workTitle'] ?? '') as String;
+                          final target = _questionWorkTitle(
+                            Map<String, dynamic>.from(qs[round] as Map),
+                          );
                           final correct = _match(ans, target);
 
                           await _svc.submitAnswer(
@@ -450,11 +497,14 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
       final d = (spotsSnap.docs.toList()..shuffle(rand)).first;
       final m = d.data();
       double to(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
+      final workTitle = _resolveWorkTitle(m['workTitle'], fallback: w.id);
+      if (workTitle.isEmpty) continue;
 
       out.add({
         'id': d.id,
+        'workKey': w.id,
         'name': m['name'] ?? '',
-        'workTitle': (m['workTitle'] ?? w.id) as String,
+        'workTitle': workTitle,
         'image': m['image'] ?? '',
         'address': (m['address'] ?? '').toString(),
         'latitude': to(m['latitude']),
@@ -469,8 +519,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   }
 
   bool _match(String ans, String workTitle) {
-    String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s　]'), '');
-    return norm(ans) == norm(workTitle);
+    return _sameWorkTitle(ans, workTitle);
   }
 }
 
@@ -781,20 +830,23 @@ class _FinishedPaneState extends State<_FinishedPane> {
   int _players = 0;
   int _ready = 0;
   bool _voted = false;
+  bool _rematchStarting = false;
   Timer? _timer;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _playersSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _rematchSub;
   int _remain = _REMATCH_WINDOW_SEC;
 
   @override
   void initState() {
     super.initState();
-    FirebaseFirestore.instance
+    _playersSub = FirebaseFirestore.instance
         .collection('rooms')
         .doc(widget.roomId)
         .collection('players')
         .snapshots()
         .listen((s) => setState(() => _players = s.docs.length));
 
-    FirebaseFirestore.instance
+    _rematchSub = FirebaseFirestore.instance
         .collection('rooms')
         .doc(widget.roomId)
         .collection('rematch')
@@ -810,14 +862,13 @@ class _FinishedPaneState extends State<_FinishedPane> {
       if (!mounted) return;
       setState(() => _remain = (_remain - 1).clamp(0, _REMATCH_WINDOW_SEC));
 
-      // 全員押したら（プラベのみ）→ ホストが再戦開始
-      if (widget.isPrivate &&
-          _ready > 0 &&
-          _players > 0 &&
-          _ready >= _players) {
+      final everyoneReady =
+          widget.isPrivate && _ready > 0 && _players > 0 && _ready >= _players;
+      if (everyoneReady) {
         if (widget.isHost) {
-          await widget.onRematchStartByHost(null);
+          await _startRematchIfNeeded();
         }
+        return;
       }
 
       // タイムアップ → ロビーへ
@@ -832,7 +883,20 @@ class _FinishedPaneState extends State<_FinishedPane> {
   @override
   void dispose() {
     _timer?.cancel();
+    _playersSub?.cancel();
+    _rematchSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _startRematchIfNeeded() async {
+    if (_rematchStarting) return;
+    _rematchStarting = true;
+    try {
+      await widget.onRematchStartByHost(null);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _rematchStarting = false);
+    }
   }
 
   Future<void> _vote() async {
@@ -860,11 +924,16 @@ class _FinishedPaneState extends State<_FinishedPane> {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: (widget.isPrivate && !_voted) ? _vote : null,
+                      onPressed:
+                          (widget.isPrivate && !_voted && !_rematchStarting)
+                              ? _vote
+                              : null,
                       icon: const Icon(Icons.replay),
                       label: Text(
                         widget.isPrivate
-                            ? (_voted ? '再戦希望済み' : '再戦（全員で押す）')
+                            ? (_rematchStarting
+                                ? '再戦準備中…'
+                                : (_voted ? '再戦希望済み' : '再戦（全員で押す）'))
                             : '戻る',
                       ),
                     ),
@@ -990,7 +1059,11 @@ class _PlayPaneState extends State<_PlayPane> {
   @override
   void didUpdateWidget(covariant _PlayPane old) {
     super.didUpdateWidget(old);
-    if (widget.round != old.round) {
+    final shouldReset =
+        widget.round != old.round ||
+        widget.roundStartedAt != old.roundStartedAt ||
+        _questionSignature(widget.question) != _questionSignature(old.question);
+    if (shouldReset) {
       _playedResultSfx = false;
       _submitted = false;
       _roundClosed = false;
@@ -1026,10 +1099,8 @@ class _PlayPaneState extends State<_PlayPane> {
   }
 
   bool _isCorrectAnswer(String answer) {
-    final target = (widget.question['workTitle'] ?? '').toString();
-    String normalize(String s) =>
-        s.toLowerCase().replaceAll(RegExp(r'[\s　]'), '');
-    return normalize(answer) == normalize(target);
+    final target = _questionWorkTitle(widget.question);
+    return _sameWorkTitle(answer, target);
   }
 
   void _listenPlayersCount() async {
@@ -1056,7 +1127,7 @@ class _PlayPaneState extends State<_PlayPane> {
               (_playersCount > 0) && (_answersCount >= _playersCount);
 
           if (allAnswered) {
-            final title = (widget.question['workTitle'] ?? '') as String;
+            final title = _questionWorkTitle(widget.question);
             setState(() {
               _roundClosed = true;
               _revealTitle = title;
@@ -1080,7 +1151,7 @@ class _PlayPaneState extends State<_PlayPane> {
       if (_pause) return;
       setState(() => _remain = (_remain - 1).clamp(0, widget.roundTimeSec));
       if (_remain == 0) {
-        _revealTitle ??= (widget.question['workTitle'] ?? '') as String;
+        _revealTitle ??= _questionWorkTitle(widget.question);
         _roundClosed = true;
         _ticker?.cancel();
         if (!_submitted) _submit(timeUp: true);
@@ -1089,27 +1160,54 @@ class _PlayPaneState extends State<_PlayPane> {
   }
 
   void _prepareChoices() {
-    final correct = (widget.question['workTitle'] ?? '') as String;
-    final qid =
-        (widget.question['id'] ?? '${widget.question['name']}') as String;
+    final correct = _questionWorkTitle(widget.question);
+    final qid = _trimmedText(
+      widget.question['id'] ?? '${widget.question['name']}',
+    );
     final rnd = Random(qid.hashCode);
-    final set = <String>{correct};
     final pool = widget.workPool.isNotEmpty ? widget.workPool : [correct];
+    final correctKey = _normalizeWorkTitle(correct);
+    final choicesByKey = <String, String>{};
 
-    while (set.length < 4 && pool.isNotEmpty) {
-      final cand = pool[rnd.nextInt(pool.length)];
-      if (cand != correct) set.add(cand);
+    if (correct.isNotEmpty && correctKey.isNotEmpty) {
+      choicesByKey[correctKey] = correct;
     }
-    while (set.length < 4) {
-      set.add('（ダミー）${set.length}');
+
+    final shuffledPool = pool.toList()..shuffle(rnd);
+    for (final raw in shuffledPool) {
+      final candidate = _resolveWorkTitle(raw, fallback: '');
+      final key = _normalizeWorkTitle(candidate);
+      if (candidate.isEmpty ||
+          key.isEmpty ||
+          key == correctKey ||
+          choicesByKey.containsKey(key)) {
+        continue;
+      }
+      choicesByKey[key] = candidate;
+      if (choicesByKey.length >= 4) break;
     }
-    final list = set.toList()..shuffle(rnd);
+
+    var fillerNo = 1;
+    while (choicesByKey.length < 4) {
+      final filler = '（ダミー）$fillerNo';
+      fillerNo++;
+      choicesByKey.putIfAbsent(_normalizeWorkTitle(filler), () => filler);
+    }
+
+    final list = choicesByKey.values.take(4).toList()..shuffle(rnd);
+    var correctIndex = list.indexWhere(
+      (choice) => _sameWorkTitle(choice, correct),
+    );
+    if (correct.isNotEmpty && correctIndex < 0 && list.isNotEmpty) {
+      correctIndex = rnd.nextInt(list.length);
+      list[correctIndex] = correct;
+    }
 
     setState(() {
       _choices
         ..clear()
         ..addAll(list);
-      _correctIndex = _choices.indexOf(correct);
+      _correctIndex = correctIndex >= 0 ? correctIndex : null;
       _pickedIndex = null;
       _pause = false;
     });
