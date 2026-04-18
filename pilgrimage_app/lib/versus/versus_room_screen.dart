@@ -57,8 +57,10 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
   bool get isHost => _hostUid == _auth.currentUser?.uid;
   String? _hostUid;
+  String? _roomStatus;
   bool _startingInProgress = false;
   bool _roomDeletedRedirectScheduled = false;
+  Timer? _roomDeletedDebounce;
 
   // 自動進行監視
   StreamSubscription? _autoAnsSub;
@@ -83,6 +85,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   void dispose() {
     _stopAutoAdvanceWatchers();
     _presenceTimer?.cancel();
+    _roomDeletedDebounce?.cancel();
     super.dispose();
   }
 
@@ -121,7 +124,11 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     _presenceSyncing = true;
     try {
       await _svc.touchPresence(widget.roomId);
-      await _svc.pruneStalePlayers(widget.roomId);
+      // 対戦中のprune は一時的なハートビート遅延で進行を壊すため、
+      // waiting 中かつホストのみが実行する。
+      if (isHost && _roomStatus == 'waiting') {
+        await _svc.pruneStalePlayers(widget.roomId);
+      }
     } catch (_) {
       // no-op
     } finally {
@@ -129,15 +136,22 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
     }
   }
 
+  // 一時的なスナップショット欠落で誤って戻さないよう、
+  // 2秒継続してルームが消えている場合のみ遷移する。
   void _redirectToModeSelectionOnRoomDeleted() {
     if (_roomDeletedRedirectScheduled || !mounted) return;
-    _roomDeletedRedirectScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _roomDeletedDebounce ??= Timer(const Duration(seconds: 2), () {
       if (!mounted) return;
+      _roomDeletedRedirectScheduled = true;
       Navigator.of(
         context,
       ).pushNamedAndRemoveUntil(AppRoutes.modeSelection, (route) => false);
     });
+  }
+
+  void _cancelRoomDeletedRedirect() {
+    _roomDeletedDebounce?.cancel();
+    _roomDeletedDebounce = null;
   }
 
   Future<bool> _confirmLeaveRoom(BuildContext context) async {
@@ -318,12 +332,14 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
           return const CupertinoPageScaffold(
             child: Material(
               color: Colors.transparent,
-              child: Center(child: Text('ルームが終了しました。画面を戻しています…')),
+              child: Center(child: CupertinoActivityIndicator()),
             ),
           );
         }
+        _cancelRoomDeletedRedirect();
         _hostUid = data['hostUid'] as String?;
         final status = (data['status'] as String?) ?? 'waiting';
+        _roomStatus = status;
         final round = (data['round'] ?? 0) as int;
         final List qs = (data['questions'] ?? []) as List;
         final int roundTimeSec = (data['roundTimeSec'] ?? 20) as int;

@@ -9,7 +9,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pilgrimage App</string>
+	<string>巡礼の旅</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -69,16 +69,16 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.747768754958-h2ccp7rdpl24k2vd8f93r7g7a49cdo52</string>
-			</array>
-		</dict>
-	</array>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.747768754958-7rnnufn3c2juuv76nckdspabjekj5o3m</string>
+            </array>
+        </dict>
+    </array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>マップ上で現在地を表示するために位置情報を使用します。</string>
 	<key>NSLocationAlwaysUsageDescription</key>

@@ -834,9 +834,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ? candidates
                     : _all;
 
-            // ズームに応じてマーカーを間引いてから描画
+            // ズームに応じてマーカーを間引いてから描画。
+            // 拡大時は近接ピン同士が同一セルに吸収されて消える現象（例：七里ヶ浜駅）を
+            // 避けるため、zoom >= 14 では間引かず全ピンを表示する。
             final currentZoom = _lastCamera?.zoom ?? 12.0;
-            final renderList = _downsample(visible, currentZoom, max: 700);
+            final renderList =
+                currentZoom >= 14.0
+                    ? visible
+                    : _downsample(visible, currentZoom, max: 700);
 
             final markers =
                 renderList
