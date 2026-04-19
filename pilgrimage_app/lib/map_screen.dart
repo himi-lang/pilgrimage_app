@@ -71,10 +71,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // after-buildを1回だけ走らせる
   bool _onceAfterBuildRan = false;
 
-  // ズーム整数バケットの差分でマーカー再計算
-  double _lastZoomBucket = -1000;
-  int _markerRevision = 0;
-
   // 画像検索モードから来た作品の pin 固定を適用済みかどうか
   bool _initialWorkApplied = false;
 
@@ -764,31 +760,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  // --- マーカー間引き（軽量化） ---
-  double _cellForZoom(double z) {
-    if (z >= 17) return 0.0008; // ~80m
-    if (z >= 15) return 0.0016; // ~160m
-    if (z >= 13) return 0.003; // ~300m
-    if (z >= 11) return 0.006; // ~600m
-    if (z >= 9) return 0.012; // ~1.2km
-    return 0.02; // ~2km
-  }
-
-  List<LocationData> _downsample(
-    List<LocationData> list,
-    double zoom, {
-    int max = 900,
-  }) {
-    final cell = _cellForZoom(zoom);
-    final map = <String, LocationData>{};
-    for (final d in list) {
-      final k =
-          '${(d.latitude / cell).round()}:${(d.longitude / cell).round()}';
-      map.putIfAbsent(k, () => d);
-      if (map.length >= max) break;
-    }
-    return map.values.toList(growable: false);
-  }
+  // ピンの取りこぼしを防ぐため、Google Map標準のPOI(店舗など)を非表示にする。
+  // 自アプリの聖地ピンだけが残る。
+  static const String _mapStyleHidePoi = '''
+[
+  {"featureType": "poi", "stylers": [{"visibility": "off"}]},
+  {"featureType": "transit", "elementType": "labels.icon", "stylers": [{"visibility": "off"}]}
+]
+''';
 
   @override
   Widget build(BuildContext context) {
@@ -834,17 +813,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     ? candidates
                     : _all;
 
-            // ズームに応じてマーカーを間引いてから描画。
-            // 拡大時は近接ピン同士が同一セルに吸収されて消える現象（例：七里ヶ浜駅）を
-            // 避けるため、zoom >= 14 では間引かず全ピンを表示する。
-            final currentZoom = _lastCamera?.zoom ?? 12.0;
-            final renderList =
-                currentZoom >= 14.0
-                    ? visible
-                    : _downsample(visible, currentZoom, max: 700);
-
+            // 近接ピンが同一セルに吸収されて消える現象を避けるため、間引きは行わず全ピンを表示する。
             final markers =
-                renderList
+                visible
                     .map(
                       (d) => Marker(
                         markerId: MarkerId(d.id),
@@ -897,6 +868,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                 ),
                 GoogleMap(
                   initialCameraPosition: _initialCamera,
+                  style: _mapStyleHidePoi,
                   onMapCreated: (c) async {
                     if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
                     _mapReady = true;
@@ -927,14 +899,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     }
                   },
                   onCameraMove: (pos) => _lastCamera = pos,
-                  onCameraIdle: () {
-                    final z = _lastCamera?.zoom ?? 12.0;
-                    final bucket = z.floorToDouble();
-                    if ((bucket - _lastZoomBucket).abs() >= 1) {
-                      _lastZoomBucket = bucket;
-                      if (mounted) setState(() => _markerRevision++);
-                    }
-                  },
                 ),
 
                 // 候補パネルは candidates を表示
