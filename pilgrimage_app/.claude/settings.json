@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; [[ \"$f\" == *.dart ]] && [[ \"$f\" != *.g.dart ]] && dart format \"$f\" 2>/dev/null; } || true",
+            "statusMessage": "dart format 実行中..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; if [[ \"$f\" == *.g.dart ]]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"*.g.dart は自動生成ファイルです。直接編集しないでください（CLAUDE.md: lib/generated/ 以下は自動生成）。\"}}'; fi; } || true"
+          }
+        ]
+      }
+    ]
+  }
+}

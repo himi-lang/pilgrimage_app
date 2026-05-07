@@ -1235,128 +1235,186 @@ class _PlayPaneState extends State<_PlayPane> {
     double toD(x) => (x is num) ? x.toDouble() : double.tryParse('$x') ?? 0.0;
     final pos = LatLng(toD(q['latitude']), toD(q['longitude']));
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
+    final mq = MediaQuery.of(context);
+    final screenHeight = mq.size.height;
+    final bottomPadding = mq.padding.bottom;
+    final isCorrect = _resultText == '正解！';
+
+    // 画面高さに応じて画像・マップの高さを可変に
+    final imageHeight = (screenHeight * 0.20).clamp(100.0, 200.0);
+    final mapHeight = (screenHeight * 0.18).clamp(90.0, 180.0);
+
+    return Column(
       children: [
-        Text(
-          '第${widget.round + 1}問 / ${widget.total}',
-          style: Theme.of(context).textTheme.titleMedium,
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            children: [
+              Text(
+                '第${widget.round + 1}問 / ${widget.total}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(value: _remain / widget.roundTimeSec),
+              Row(children: [Text('残り $_remain s')]),
+              const SizedBox(height: 8),
+              if ((q['image'] as String?)?.isNotEmpty == true)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    height: imageHeight,
+                    child: SpotImage(
+                      raw: (q['image'] ?? '').toString(),
+                      width: 720,
+                      cacheWidth: 720,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'スポット: ${q['name'] ?? ''}',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: mapHeight,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: GoogleMap(
+                    key: ValueKey('round_map_${widget.round}'),
+                    initialCameraPosition: CameraPosition(
+                      target: pos,
+                      zoom: 14,
+                    ),
+                    markers: {
+                      Marker(
+                        markerId: MarkerId('m_${widget.round}'),
+                        position: pos,
+                      ),
+                    },
+                    mapToolbarEnabled: false,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    compassEnabled: false,
+                    liteModeEnabled: true,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildChoicesArea(),
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
-        LinearProgressIndicator(value: _remain / widget.roundTimeSec),
-        Row(children: [Text('残り $_remain s')]),
-        const SizedBox(height: 8),
-        if ((q['image'] as String?)?.isNotEmpty == true)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              height: 180,
-              child: SpotImage(
-                raw: (q['image'] ?? '').toString(),
-                width: 720,
-                cacheWidth: 720,
-                fit: BoxFit.cover,
+        // 結果エリア：スクロールせずに常に画面下部へ固定表示
+        if (_resultText != null)
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPadding + 12),
+            decoration: BoxDecoration(
+              color: isCorrect ? Colors.green.shade50 : Colors.red.shade50,
+              border: Border(
+                top: BorderSide(
+                  color:
+                      isCorrect ? Colors.green.shade200 : Colors.red.shade200,
+                ),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _resultText!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isCorrect ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                if (_revealTitle != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '正解：$_revealTitle',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '${(_sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s',
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Padding(
+            padding: EdgeInsets.fromLTRB(12, 4, 12, bottomPadding + 8),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${(_sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s',
               ),
             ),
           ),
-        const SizedBox(height: 8),
-        Text(
-          'スポット: ${q['name'] ?? ''}',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 160,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: GoogleMap(
-              key: ValueKey('round_map_${widget.round}'),
-              initialCameraPosition: CameraPosition(target: pos, zoom: 14),
-              markers: {
-                Marker(markerId: MarkerId('m_${widget.round}'), position: pos),
-              },
-              mapToolbarEnabled: false,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              compassEnabled: false,
-              liteModeEnabled: true,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildChoicesArea(),
-        if (_resultText != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _resultText!,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _resultText!.contains('正解') ? Colors.green : Colors.red,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-        if (_revealTitle != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '正解：$_revealTitle',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Text(
-            '${(_sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s',
-          ),
-        ),
-        SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
       ],
     );
   }
 
   Widget _buildChoicesArea() {
     if (_choices.isEmpty) return const SizedBox.shrink();
-    return GridView.count(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      crossAxisCount: 2,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 3.2,
-      children: List.generate(_choices.length, (i) {
-        final picked = _pickedIndex == i;
-        final isCorrect = (_correctIndex == i);
-        Color? bg;
-        if (_pickedIndex != null) {
-          bg = isCorrect ? Colors.green : (picked ? Colors.red : null);
-        }
-        return ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: bg,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          onPressed:
-              (_submitted || _pickedIndex != null || _roundClosed)
-                  ? null
-                  : () => _onPick(i),
-          child: Text(
-            _choices[i],
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // ボタン高さを画面幅に対して動的に決定（48〜72px に収める）
+        final cellWidth = (constraints.maxWidth - 12) / 2;
+        final cellHeight = (cellWidth / 3.2).clamp(48.0, 72.0);
+        final aspectRatio = cellWidth / cellHeight;
+        return GridView.count(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: aspectRatio,
+          children: List.generate(_choices.length, (i) {
+            final picked = _pickedIndex == i;
+            final isCorrect = (_correctIndex == i);
+            Color? bg;
+            if (_pickedIndex != null) {
+              bg = isCorrect ? Colors.green : (picked ? Colors.red : null);
+            }
+            return ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: bg,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed:
+                  (_submitted || _pickedIndex != null || _roundClosed)
+                      ? null
+                      : () => _onPick(i),
+              child: Text(
+                _choices[i],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            );
+          }),
         );
-      }),
+      },
     );
   }
 
