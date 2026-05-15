@@ -11,8 +11,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'app_route_observer.dart';
 import 'firebase_service.dart';
 import './models/location.dart';
+import 'service/app_audio_service.dart';
 import 'service/commons_image_service.dart';
 import 'service/location_search_service.dart';
 import 'widgets/app_ui.dart';
@@ -28,7 +30,8 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
+class _MapScreenState extends State<MapScreen>
+    with WidgetsBindingObserver, RouteAware {
   // --- 検索 ---
   final TextEditingController _searchCtrl = TextEditingController();
   bool _showCandidates = false;
@@ -73,6 +76,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   // 画像検索モードから来た作品の pin 固定を適用済みかどうか
   bool _initialWorkApplied = false;
+  PageRoute<dynamic>? _route;
 
   bool get _hasInitialWorkTitle =>
       widget.initialWorkTitle != null &&
@@ -90,6 +94,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    AppAudioService.instance.playMainBgm();
     WidgetsBinding.instance.addObserver(this);
     _locationsStream = FirebaseService().locationsStreamAllWorks();
 
@@ -119,13 +124,38 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && _route != route) {
+      if (_route != null) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _saveResumeState();
     _searchCtrl.dispose();
     _debugSub?.cancel();
     _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didPush() {
+    AppAudioService.instance.playMainBgm();
+  }
+
+  @override
+  void didPopNext() {
+    AppAudioService.instance.playMainBgm();
   }
 
   @override
@@ -519,7 +549,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   right: 4,
                   top: 4,
                   child: IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: AppAudioService.instance.withTapSfx(
+                      () => Navigator.of(context).pop(),
+                    ),
                     icon: const Icon(Icons.close),
                     tooltip: '閉じる',
                   ),
@@ -621,10 +653,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         IconButton(
-                          onPressed:
-                              () => setState(() {
-                                _selected = null;
-                              }),
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () => setState(() {
+                              _selected = null;
+                            }),
+                          ),
                           icon: const Icon(Icons.close),
                           tooltip: '閉じる',
                         ),
@@ -650,18 +683,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     Row(
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () => _openRoute(d),
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () => _openRoute(d),
+                          ),
                           icon: const Icon(Icons.directions),
                           label: const Text('経路'),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(
-                          onPressed: () async {
-                            await _goToLatLng(
-                              LatLng(d.latitude, d.longitude),
-                              zoom: _hitZoom,
-                            );
-                          },
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () async {
+                              await _goToLatLng(
+                                LatLng(d.latitude, d.longitude),
+                                zoom: _hitZoom,
+                              );
+                            },
+                          ),
                           icon: const Icon(Icons.center_focus_strong),
                           label: const Text('中心へ'),
                         ),

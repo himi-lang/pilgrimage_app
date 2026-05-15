@@ -2,6 +2,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'service/app_audio_service.dart';
 import 'service/terms_service.dart'; // ★ 追加（パスはこのファイルからの相対）
 
 class TermsScreen extends StatelessWidget {
@@ -79,6 +80,7 @@ class TermsScreen extends StatelessWidget {
                     //場合によって拒否ボタンはいらない可能性。
                     child: CupertinoButton(
                       onPressed: () {
+                        AppAudioService.instance.playTapSfx();
                         // 呼び出し元に false を返して閉じる
                         Navigator.of(context).pop(false);
                       },
@@ -95,6 +97,7 @@ class TermsScreen extends StatelessWidget {
                   Expanded(
                     child: CupertinoButton.filled(
                       onPressed: () async {
+                        AppAudioService.instance.playTapSfx();
                         // フラグ保存
                         await TermsService.acceptCurrentTerms();
                         if (!context.mounted) return;

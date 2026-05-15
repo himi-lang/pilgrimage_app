@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 import '../app_routes.dart';
+import '../service/app_audio_service.dart';
 import '../widgets/app_ui.dart';
 import '../service/spot_image.dart';
 import 'versus_service.dart';
@@ -60,6 +61,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
   String? _roomStatus;
   bool _startingInProgress = false;
   bool _roomDeletedRedirectScheduled = false;
+  String? _lastBgmStatus;
   Timer? _roomDeletedDebounce;
 
   // 自動進行監視
@@ -83,10 +85,58 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
 
   @override
   void dispose() {
+    unawaited(
+      AppAudioService.instance.fadeOutScreenBgm(
+        onlyIfPath: AppAudioService.versusWaitingBgmPath,
+        duration: const Duration(milliseconds: 500),
+      ),
+    );
+    unawaited(
+      AppAudioService.instance.fadeOutScreenBgm(
+        onlyIfPath: AppAudioService.versusPlayingBgmPath,
+        duration: const Duration(milliseconds: 500),
+      ),
+    );
     _stopAutoAdvanceWatchers();
     _presenceTimer?.cancel();
     _roomDeletedDebounce?.cancel();
     super.dispose();
+  }
+
+  void _syncBgmForStatus(String status) {
+    if (_lastBgmStatus == status) return;
+    _lastBgmStatus = status;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (status == 'waiting') {
+        unawaited(AppAudioService.instance.playVersusWaitingBgm());
+        return;
+      }
+      if (status == 'playing') {
+        unawaited(_playVersusPlayingBgmAfterWaitingFade());
+        return;
+      }
+      unawaited(
+        AppAudioService.instance.fadeOutScreenBgm(
+          onlyIfPath: AppAudioService.versusWaitingBgmPath,
+        ),
+      );
+      unawaited(
+        AppAudioService.instance.fadeOutScreenBgm(
+          onlyIfPath: AppAudioService.versusPlayingBgmPath,
+        ),
+      );
+    });
+  }
+
+  Future<void> _playVersusPlayingBgmAfterWaitingFade() async {
+    await AppAudioService.instance.fadeOutScreenBgm(
+      onlyIfPath: AppAudioService.versusWaitingBgmPath,
+      duration: const Duration(milliseconds: 500),
+    );
+    if (!mounted || _lastBgmStatus != 'playing') return;
+    await AppAudioService.instance.playVersusPlayingBgm();
   }
 
   Future<void> _loadGlobalWorkPool() async {
@@ -165,11 +215,15 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
             content: Text(msg),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(c, false),
+                onPressed: AppAudioService.instance.withTapSfx(
+                  () => Navigator.pop(c, false),
+                ),
                 child: const Text('キャンセル'),
               ),
               FilledButton(
-                onPressed: () => Navigator.pop(c, true),
+                onPressed: AppAudioService.instance.withTapSfx(
+                  () => Navigator.pop(c, true),
+                ),
                 child: const Text('離脱する'),
               ),
             ],
@@ -340,6 +394,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
         _hostUid = data['hostUid'] as String?;
         final status = (data['status'] as String?) ?? 'waiting';
         _roomStatus = status;
+        _syncBgmForStatus(status);
         final round = (data['round'] ?? 0) as int;
         final List qs = (data['questions'] ?? []) as List;
         final int roundTimeSec = (data['roundTimeSec'] ?? 20) as int;
@@ -396,6 +451,7 @@ class _VersusRoomScreenState extends State<VersusRoomScreen> {
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   onPressed: () async {
+                    AppAudioService.instance.playTapSfx();
                     final ok = await _confirmLeaveRoom(context);
                     if (ok) await _goLobby();
                   },
@@ -623,7 +679,7 @@ class _WaitingPane extends StatelessWidget {
           const SizedBox(height: 12),
           if (isHost)
             FilledButton.icon(
-              onPressed: onStart,
+              onPressed: AppAudioService.instance.withTapSfx(onStart),
               icon: const Icon(Icons.play_arrow),
               label: const Text('開始'),
             ),
@@ -801,7 +857,11 @@ class _PublicWaitingPaneState extends State<_PublicWaitingPane> {
                   const SizedBox(height: 12),
                   CupertinoButton.filled(
                     onPressed:
-                        status == 'waiting' ? () => _setReady(!myReady) : null,
+                        status == 'waiting'
+                            ? AppAudioService.instance.withTapSfx(
+                              () => _setReady(!myReady),
+                            )
+                            : null,
                     child: Text(myReady ? '開始を取り消す' : '開始'),
                     //myreadyがtrueなら開始を取り消す、そうでないなら開始にする。
                   ),
@@ -942,7 +1002,7 @@ class _FinishedPaneState extends State<_FinishedPane> {
                     child: FilledButton.icon(
                       onPressed:
                           (widget.isPrivate && !_voted && !_rematchStarting)
-                              ? _vote
+                              ? AppAudioService.instance.withTapSfx(_vote)
                               : null,
                       icon: const Icon(Icons.replay),
                       label: Text(
@@ -974,7 +1034,9 @@ class _FinishedPaneState extends State<_FinishedPane> {
                   ),
                   const Spacer(),
                   OutlinedButton.icon(
-                    onPressed: widget.onGoLobby,
+                    onPressed: AppAudioService.instance.withTapSfx(
+                      widget.onGoLobby,
+                    ),
                     icon: const Icon(Icons.home_outlined),
                     label: const Text('戻る'),
                   ),
@@ -1404,7 +1466,7 @@ class _PlayPaneState extends State<_PlayPane> {
               onPressed:
                   (_submitted || _pickedIndex != null || _roundClosed)
                       ? null
-                      : () => _onPick(i),
+                      : AppAudioService.instance.withTapSfx(() => _onPick(i)),
               child: Text(
                 _choices[i],
                 maxLines: 2,

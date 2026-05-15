@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import '../service/app_audio_service.dart';
 import '../widgets/app_ui.dart';
 import '../widgets/dialogs.dart';
 import '../app_routes.dart';
@@ -18,6 +19,14 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   final codeCtrl = TextEditingController();
   bool _busy = false;
   Future<void>? _precacheFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    AppAudioService.instance.fadeOutScreenBgm(
+      onlyIfPath: AppAudioService.mainBgmPath,
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -138,14 +147,20 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               CupertinoButton.filled(
-                onPressed: _busy ? null : _quickMatch,
+                onPressed:
+                    _busy
+                        ? null
+                        : AppAudioService.instance.withTapSfx(_quickMatch),
                 child: Text(_busy ? '接続中…' : 'クイックマッチ'),
               ),
               const Divider(height: 32),
               Text('プライベートマッチ', style: titleStyle),
               const SizedBox(height: 8),
               CupertinoButton(
-                onPressed: _busy ? null : _createPrivate,
+                onPressed:
+                    _busy
+                        ? null
+                        : AppAudioService.instance.withTapSfx(_createPrivate),
                 color: CupertinoColors.systemGrey5,
                 child: const Text('部屋を作る'),
               ),
@@ -171,7 +186,10 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
                   CupertinoButton.filled(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     minimumSize: const Size(44, 44),
-                    onPressed: _busy ? null : _joinByCode,
+                    onPressed:
+                        _busy
+                            ? null
+                            : AppAudioService.instance.withTapSfx(_joinByCode),
                     child: const Text('参加'),
                   ),
                 ],

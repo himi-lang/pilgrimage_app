@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'app_route_observer.dart';
 import 'map_screen.dart';
+import 'service/app_audio_service.dart';
 import 'widgets/app_ui.dart';
 
 class ImageSearchScreen extends StatefulWidget {
@@ -12,9 +14,46 @@ class ImageSearchScreen extends StatefulWidget {
   State<ImageSearchScreen> createState() => _ImageSearchScreenState();
 }
 
-class _ImageSearchScreenState extends State<ImageSearchScreen> {
+class _ImageSearchScreenState extends State<ImageSearchScreen> with RouteAware {
   String _query = '';
   final bool _isGrid = true;
+  PageRoute<dynamic>? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    AppAudioService.instance.playMainBgm();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && _route != route) {
+      if (_route != null) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPush() {
+    AppAudioService.instance.playMainBgm();
+  }
+
+  @override
+  void didPopNext() {
+    AppAudioService.instance.playMainBgm();
+  }
 
   @override
   Widget build(BuildContext context) {

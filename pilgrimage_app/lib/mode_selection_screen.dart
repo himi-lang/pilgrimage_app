@@ -1,12 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'ads/interstitial_ad_manager.dart';
+import 'app_route_observer.dart';
 import 'app_routes.dart';
 import 'image_search_screen.dart';
 import 'map_screen.dart';
+import 'service/app_audio_service.dart';
 import 'widgets/app_ui.dart';
-import 'widgets/bottom_banner_ad.dart';
 
 const String _defaultBackgroundImage = 'assets/image_dir/main_visual.jpg';
 const String _mapModeBackgroundImage = 'assets/image_dir/long_hair.jpg';
@@ -29,14 +29,47 @@ class ModeSelectionScreen extends StatefulWidget {
   State<ModeSelectionScreen> createState() => _ModeSelectionScreenState();
 }
 
-class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
+class _ModeSelectionScreenState extends State<ModeSelectionScreen>
+    with RouteAware {
   Future<void>? _precacheFuture;
   _MenuPage _currentPage = _MenuPage.top;
+  PageRoute<dynamic>? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    AppAudioService.instance.playMainBgm();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _precacheFuture ??= _precacheBackgroundImages();
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && _route != route) {
+      if (_route != null) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPush() {
+    AppAudioService.instance.playMainBgm();
+  }
+
+  @override
+  void didPopNext() {
+    AppAudioService.instance.playMainBgm();
   }
 
   Future<void> _precacheBackgroundImages() async {
@@ -170,7 +203,6 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
                     ),
                   ),
                 ),
-                const BottomBannerAd(),
               ],
             ),
           ),
@@ -254,13 +286,9 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               subtitle: 'ひとりで遊ぶ・友達と遊ぶ',
               backgroundColor: cs.surfaceContainer,
               onTap: () {
-                InterstitialAdManager.show(
-                  onFinished: () {
-                    _pushNamedAfterBackgroundReady(
-                      routeName: AppRoutes.versusLobby,
-                      imagePath: _versusSubModeBackgroundImage,
-                    );
-                  },
+                _pushNamedAfterBackgroundReady(
+                  routeName: AppRoutes.versusLobby,
+                  imagePath: _versusSubModeBackgroundImage,
                 );
               },
             ),
@@ -271,13 +299,9 @@ class _ModeSelectionScreenState extends State<ModeSelectionScreen> {
               subtitle: '全国のユーザーとランダムマッチ',
               backgroundColor: cs.surfaceContainer,
               onTap: () {
-                InterstitialAdManager.show(
-                  onFinished: () {
-                    _pushNamedAfterBackgroundReady(
-                      routeName: AppRoutes.versusPublicWait,
-                      imagePath: _versusSubModeBackgroundImage,
-                    );
-                  },
+                _pushNamedAfterBackgroundReady(
+                  routeName: AppRoutes.versusPublicWait,
+                  imagePath: _versusSubModeBackgroundImage,
                 );
               },
             ),
@@ -329,7 +353,7 @@ class _ModeMenuCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: AppAudioService.instance.withTapSfx(onTap),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(19),

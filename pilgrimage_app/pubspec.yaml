@@ -29,17 +29,16 @@ dependencies:
   image_cropper: ^11.0.0
   flutter_launcher_icons: ^0.14.4
   audioplayers: ^6.5.1
-  google_mobile_ads: ^6.0.0
 
 flutter_launcher_icons:
   android: true
   ios: true
 
-  image_path: "assets/image_dir/anime_atlas_icon.png"
+  image_path: "assets/image_dir/app_icon.JPG"
 
   #image_path_ios: ""
-  adaptive_icon_background: "assets/image_dir/anime_atlas_back.png"
-  adaptive_icon_foreground: "assets/image_dir/anime_atlas_front.png"
+  adaptive_icon_background: "assets/image_dir/white_back.png"
+  adaptive_icon_foreground: "assets/image_dir/app_icon.JPG"
   remove_alpha_ios: true
 
 flutter:

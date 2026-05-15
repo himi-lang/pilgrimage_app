@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'firebase_options.dart';
 import 'start_screen.dart';
@@ -9,11 +8,12 @@ import 'login_screen.dart';
 import 'mode_selection_screen.dart';
 import 'map_screen.dart';
 import 'visited_pilgrimage_screen.dart';
+import 'app_route_observer.dart';
 import 'app_routes.dart';
+import 'service/app_audio_service.dart';
 import 'versus/versus_lobby_screen.dart';
 import 'versus/public_match_wait_screen.dart';
 import 'versus/versus_room_screen.dart';
-import 'ads/interstitial_ad_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +23,7 @@ Future<void> main() async {
   //firebaseのデータを先に用意するため。
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // ★ AdMob/テスト広告の初期化
-  //AdMobを先に準備する。
-  await MobileAds.instance.initialize();
-  //インティスティシャル広告の先準備
-  await InterstitialAdManager.preload();
+  await AppAudioService.instance.initialize();
 
   runApp(const MyApp());
 }
@@ -50,6 +46,7 @@ class MyApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
+      navigatorObservers: [appRouteObserver],
       theme: ThemeData(
         platform: TargetPlatform.iOS,
         useMaterial3: false,

@@ -9,6 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../mode_selection_screen.dart';
 import '../app_routes.dart';
+import '../service/app_audio_service.dart';
 
 //ここでは、共通するUIのパーツを作成している。
 
@@ -23,8 +24,9 @@ class AppBackButton extends StatelessWidget {
     return CupertinoButton(
       padding: EdgeInsets.zero,
       minimumSize: const Size(44, 44),
-      onPressed:
-          onPressed ?? () => Navigator.of(context).maybePop(), //null合体演算子。
+      onPressed: AppAudioService.instance.withTapSfx(
+        onPressed ?? () => Navigator.of(context).maybePop(), //null合体演算子。
+      ),
       child: const Icon(CupertinoIcons.back, color: CupertinoColors.white),
     );
   }
@@ -50,6 +52,7 @@ class ModeSwitchButton extends StatelessWidget {
     return CupertinoButton(
       padding: EdgeInsets.zero,
       onPressed: () async {
+        AppAudioService.instance.playTapSfx();
         // ルームから出るときの確認をしたい画面では、これまで通り confirm/beforeNavigate が使える
         if (confirm != null) {
           final ok = await confirm!();
@@ -93,7 +96,7 @@ class MapCornerShortcutButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onPressed,
+        onTap: AppAudioService.instance.withTapSfx(onPressed),
         borderRadius: BorderRadius.circular(999),
         child: Ink(
           decoration: BoxDecoration(
@@ -214,7 +217,9 @@ class AppMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return CupertinoButton(
       padding: EdgeInsets.zero,
-      onPressed: () => _openAppMenu(context),
+      onPressed: AppAudioService.instance.withTapSfx(
+        () => _openAppMenu(context),
+      ),
       minimumSize: Size(30, 30),
       child: const Icon(
         CupertinoIcons.line_horizontal_3,
@@ -287,7 +292,7 @@ ListTile _menuActionTile({
     title: Text(title, style: _menuListTextStyle),
     subtitle:
         subtitle == null ? null : Text(subtitle, style: _menuListTextStyle),
-    onTap: onTap,
+    onTap: AppAudioService.instance.withTapSfx(onTap),
   );
 }
 
@@ -317,6 +322,15 @@ void _openAppMenu(BuildContext outerContext) {
                   '設定',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
+              ),
+              _menuActionTile(
+                icon: Icons.volume_up_outlined,
+                title: '音量調整',
+                subtitle: '効果音・背景音楽のオン/オフと音量',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showAudioSettingsSheet(outerContext);
+                },
               ),
               _menuActionTile(
                 icon: Icons.person,
@@ -391,6 +405,153 @@ void _openAppMenu(BuildContext outerContext) {
   );
 }
 
+Future<void> _showAudioSettingsSheet(BuildContext outerContext) async {
+  await showModalBottomSheet(
+    context: outerContext,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setSheetState) {
+          final audio = AppAudioService.instance;
+
+          Future<void> updateBgm(bool value) async {
+            await audio.setBgmEnabled(value);
+            if (context.mounted) setSheetState(() {});
+          }
+
+          Future<void> updateSfx(bool value) async {
+            await audio.setSfxEnabled(value);
+            if (context.mounted) setSheetState(() {});
+          }
+
+          Future<void> updateBgmVolume(double value) async {
+            await audio.setBgmVolume(value);
+            if (context.mounted) setSheetState(() {});
+          }
+
+          Future<void> updateSfxVolume(double value) async {
+            await audio.setSfxVolume(value);
+            if (context.mounted) setSheetState(() {});
+          }
+
+          Future<void> updateVersusPlayingBgmVolume(double value) async {
+            await audio.setVersusPlayingBgmVolume(value);
+            if (context.mounted) setSheetState(() {});
+          }
+
+          return SafeArea(
+            top: false,
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+              children: [
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '音量調整',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.touch_app_outlined),
+                  title: const Text('タップ効果音'),
+                  subtitle: Text(audio.isSfxEnabled ? 'オン' : 'オフ'),
+                  value: audio.isSfxEnabled,
+                  onChanged: (value) async {
+                    if (audio.isSfxEnabled) {
+                      await audio.playTapSfx();
+                    }
+                    await updateSfx(value);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.volume_down_outlined),
+                  title: const Text('効果音の音量'),
+                  subtitle: Slider.adaptive(
+                    value: audio.sfxVolume,
+                    min: 0,
+                    max: 1,
+                    divisions: 10,
+                    label: '${(audio.sfxVolume * 100).round()}%',
+                    onChanged:
+                        audio.isSfxEnabled
+                            ? (value) {
+                              updateSfxVolume(value);
+                            }
+                            : null,
+                    onChangeEnd: (value) async {
+                      if (audio.isSfxEnabled) {
+                        await audio.playTapSfx();
+                      }
+                    },
+                  ),
+                  trailing: Text('${(audio.sfxVolume * 100).round()}%'),
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.music_note_outlined),
+                  title: const Text('背景音楽'),
+                  subtitle: Text(audio.isBgmEnabled ? 'オン' : 'オフ'),
+                  value: audio.isBgmEnabled,
+                  onChanged: (value) async {
+                    if (audio.isSfxEnabled) {
+                      await audio.playTapSfx();
+                    }
+                    await updateBgm(value);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.graphic_eq_outlined),
+                  title: const Text('背景音楽の音量'),
+                  subtitle: Slider.adaptive(
+                    value: audio.bgmVolume,
+                    min: 0,
+                    max: 1,
+                    divisions: 10,
+                    label: '${(audio.bgmVolume * 100).round()}%',
+                    onChanged:
+                        audio.isBgmEnabled
+                            ? (value) {
+                              updateBgmVolume(value);
+                            }
+                            : null,
+                  ),
+                  trailing: Text('${(audio.bgmVolume * 100).round()}%'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.sports_esports_outlined),
+                  title: const Text('対戦中BGMの音量'),
+                  subtitle: Slider.adaptive(
+                    value: audio.versusPlayingBgmVolume,
+                    min: 0,
+                    max: 1,
+                    divisions: 10,
+                    label: '${(audio.versusPlayingBgmVolume * 100).round()}%',
+                    onChanged:
+                        audio.isBgmEnabled
+                            ? (value) {
+                              updateVersusPlayingBgmVolume(value);
+                            }
+                            : null,
+                  ),
+                  trailing: Text(
+                    '${(audio.versusPlayingBgmVolume * 100).round()}%',
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
 ListTile _policyTile(
   BuildContext context, {
   required String title,
@@ -406,6 +567,7 @@ ListTile _policyTile(
       style: _menuListTextStyle,
     ),
     onTap: () async {
+      AppAudioService.instance.playTapSfx();
       String body;
 
       if (assetPath != null) {
@@ -585,7 +747,10 @@ Future<void> _showProfileDialog(BuildContext outerContext) async {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
-                    onTap: uploading ? null : pickAndCrop,
+                    onTap:
+                        uploading
+                            ? null
+                            : AppAudioService.instance.withTapSfx(pickAndCrop),
                     child: CircleAvatar(
                       radius: 36,
                       backgroundImage: avatarImage,
@@ -597,7 +762,10 @@ Future<void> _showProfileDialog(BuildContext outerContext) async {
                   ),
                   const SizedBox(height: 8),
                   TextButton.icon(
-                    onPressed: uploading ? null : pickAndCrop,
+                    onPressed:
+                        uploading
+                            ? null
+                            : AppAudioService.instance.withTapSfx(pickAndCrop),
                     icon: const Icon(Icons.photo_library),
                     label: const Text('画像を選択'),
                   ),
@@ -618,11 +786,18 @@ Future<void> _showProfileDialog(BuildContext outerContext) async {
             actions: [
               TextButton(
                 onPressed:
-                    uploading ? null : () => Navigator.of(dialogContext).pop(),
+                    uploading
+                        ? null
+                        : AppAudioService.instance.withTapSfx(
+                          () => Navigator.of(dialogContext).pop(),
+                        ),
                 child: const Text('キャンセル'),
               ),
               FilledButton(
-                onPressed: uploading ? null : save,
+                onPressed:
+                    uploading
+                        ? null
+                        : AppAudioService.instance.withTapSfx(save),
                 child: const Text('保存'),
               ),
             ],

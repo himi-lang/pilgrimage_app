@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'mode_selection_screen.dart';
+import 'service/app_audio_service.dart';
 import 'widgets/dialogs.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -22,6 +23,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isSignUp = false;
   bool _busy = false;
   bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    AppAudioService.instance.fadeOutScreenBgm(
+      duration: const Duration(milliseconds: 300),
+    );
+  }
 
   @override
   void dispose() {
@@ -183,7 +192,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         autocorrect: false,
                         suffix: CupertinoButton(
                           padding: EdgeInsets.zero,
-                          onPressed: () => setState(() => _obscure = !_obscure),
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () => setState(() => _obscure = !_obscure),
+                          ),
                           minimumSize: Size(30, 30),
                           child: Icon(
                             _obscure
@@ -207,12 +218,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                       const SizedBox(height: 16),
                       CupertinoButton.filled(
-                        onPressed: _busy ? null : _handleEmail,
+                        onPressed:
+                            _busy
+                                ? null
+                                : AppAudioService.instance.withTapSfx(
+                                  _handleEmail,
+                                ),
                         child: Text(title),
                       ),
                       const SizedBox(height: 8),
                       CupertinoButton(
-                        onPressed: _busy ? null : _handleGoogle,
+                        onPressed:
+                            _busy
+                                ? null
+                                : AppAudioService.instance.withTapSfx(
+                                  _handleGoogle,
+                                ),
                         child: const Text('Googleで続ける'),
                       ),
                       const SizedBox(height: 8),
@@ -220,7 +241,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed:
                             _busy
                                 ? null
-                                : () => setState(() => _isSignUp = !_isSignUp),
+                                : AppAudioService.instance.withTapSfx(
+                                  () => setState(() => _isSignUp = !_isSignUp),
+                                ),
                         child: Text(
                           _isSignUp
                               ? '既にアカウントをお持ちの方（ログインへ）'

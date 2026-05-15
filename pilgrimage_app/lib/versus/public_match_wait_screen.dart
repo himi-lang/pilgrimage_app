@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../app_routes.dart';
+import '../service/app_audio_service.dart';
 import '../widgets/app_ui.dart';
 import '../widgets/dialogs.dart';
 import 'versus_service.dart';
@@ -38,6 +39,7 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
   @override
   void initState() {
     super.initState();
+    AppAudioService.instance.playVersusWaitingBgm();
     _flipController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 450),
@@ -312,7 +314,9 @@ class _PublicMatchWaitScreenState extends State<PublicMatchWaitScreen>
                       ],
                       const SizedBox(height: 20),
                       CupertinoButton.filled(
-                        onPressed: _cancelMatch,
+                        onPressed: AppAudioService.instance.withTapSfx(
+                          _cancelMatch,
+                        ),
                         child: const Text('キャンセル'),
                       ),
                     ],
