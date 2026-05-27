@@ -58,3 +58,6 @@ key.properties
 # ---- その他 ----
 app.*.symbols
 app.*.map.json
+
+# FVM Version Cache
+.fvm/

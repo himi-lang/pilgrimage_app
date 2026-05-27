@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import 'mode_selection_screen.dart';
+import 'service/app_audio_service.dart';
+import 'widgets/dialogs.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,181 +16,251 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  final _email = TextEditingController();
+  final _pass = TextEditingController();
+  final _name = TextEditingController();
+
+  bool _isSignUp = false;
   bool _busy = false;
-  bool _busyGoogle = false;
+  bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    AppAudioService.instance.fadeOutScreenBgm(
+      duration: const Duration(milliseconds: 300),
+    );
+  }
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
+    _email.dispose();
+    _pass.dispose();
+    _name.dispose();
     super.dispose();
   }
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showAppMessageDialog(context, msg);
   }
 
-  void _onLoginSuccess(BuildContext context) {
-    Navigator.of(context).pushReplacementNamed('/mode');
-  }
-
-  Future<void> _signInEmail() async {
-    final email = _emailCtrl.text.trim();
-    final pass = _passCtrl.text;
-    if (email.isEmpty || pass.isEmpty) {
-      _toast('メールアドレスとパスワードを入力してください');
+  Future<void> _handleEmail() async {
+    //メールアドレスに関する処理
+    if (_email.text.trim().isEmpty || _pass.text.length < 6) {
+      //入力されたメールとパスワードが条件を満たさない時の処理。
+      _toast('メールと6文字以上のパスワードを入力してください');
       return;
     }
     setState(() => _busy = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: pass,
-      );
-      // authStateChanges() により遷移
-    } on FirebaseAuthException catch (e) {
-      // 必要に応じてユーザー作成（任意）
-      if (e.code == 'user-not-found') {
-        try {
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-            email: email,
-            password: pass,
-          );
-        } on FirebaseAuthException catch (e2) {
-          _toast(e2.message ?? 'サインインに失敗しました');
+      if (_isSignUp) {
+        final uc = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: _email.text.trim(),
+          password: _pass.text,
+        );
+        final displayName = _name.text.trim();
+        if (displayName.isNotEmpty) {
+          await uc.user?.updateDisplayName(displayName);
         }
+        _toast('登録しました');
       } else {
-        _toast(e.message ?? 'サインインに失敗しました');
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: _email.text.trim(),
+          password: _pass.text,
+        );
+        _toast('ログインしました');
       }
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      _toast(e.message ?? '認証エラーが発生しました');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() => _busyGoogle = true);
+  // Google ログイン（google_sign_in パッケージは使わず FirebaseAuth 経由にする）
+  Future<void> _handleGoogle() async {
+    setState(() => _busy = true);
+
     try {
       if (kIsWeb) {
-        // Web対応（必要なら）
-        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+        // Web のときは Popup で認証
+        final provider = GoogleAuthProvider();
+        provider.setCustomParameters({'prompt': 'select_account'});
+        await FirebaseAuth.instance.signInWithPopup(provider);
       } else {
-        // Android / iOS
-        final googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) {
-          // キャンセル
-          return;
-        }
-        final googleAuth = await googleUser.authentication;
+        // ---- モバイル(Android/iOS) ----
+        // v7 では initialize → authenticate の流れ
+        await GoogleSignIn.instance.initialize();
+
+        final googleUser = await GoogleSignIn.instance.authenticate();
+        final googleAuth = googleUser.authentication;
+
         final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
+          accessToken: googleAuth.idToken,
           idToken: googleAuth.idToken,
         );
+
         await FirebaseAuth.instance.signInWithCredential(credential);
       }
-      // 成功すると authStateChanges() で画面が切り替わる
+
+      if (!mounted) return;
+
+      _toast('ログインしました');
+      Navigator.of(context).pushReplacement(
+        CupertinoPageRoute(builder: (_) => const ModeSelectionScreen()),
+      );
     } on FirebaseAuthException catch (e) {
-      _toast(e.message ?? 'Googleサインインに失敗しました');
-    } catch (_) {
-      _toast('Googleサインインに失敗しました');
+      _toast(e.message ?? 'Googleサインインでエラーが発生しました');
+    } catch (e) {
+      _toast('Googleサインインでエラーが発生しました: $e');
     } finally {
-      if (mounted) setState(() => _busyGoogle = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF101214),
-      appBar: AppBar(title: const Text('ログイン')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            elevation: 6,
-            margin: const EdgeInsets.all(16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'メールアドレス',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _passCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'パスワード',
-                      prefixIcon: Icon(Icons.lock_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _busy ? null : _signInEmail,
-                      icon:
-                          _busy
-                              ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.login),
-                      label: const Text('メール/パスワードでログイン'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: const [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Text('または'),
+    const labelStyle = TextStyle(
+      fontSize: 16,
+      color: CupertinoColors.black,
+      decoration: TextDecoration.none,
+      decorationColor: CupertinoColors.transparent,
+    );
+    const fieldStyle = TextStyle(
+      fontSize: 16,
+      color: CupertinoColors.black,
+      decoration: TextDecoration.none,
+      decorationColor: CupertinoColors.transparent,
+    );
+    const placeholderStyle = TextStyle(
+      fontSize: 16,
+      color: CupertinoColors.systemGrey,
+      decoration: TextDecoration.none,
+      decorationColor: CupertinoColors.transparent,
+    );
+
+    final title = _isSignUp ? '新規登録' : 'ログイン';
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          title,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: CupertinoTheme.of(context).primaryColor,
+        automaticBackgroundVisibility: false,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset('assets/image_dir/background.jpg', fit: BoxFit.cover),
+          Container(color: Colors.white.withValues(alpha: 0.86)),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('メールアドレス', style: labelStyle),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        placeholder: 'example@example.com',
+                        placeholderStyle: placeholderStyle,
+                        style: fieldStyle,
+                        enabled: !_busy,
+                        autocorrect: false,
                       ),
-                      Expanded(child: Divider()),
+                      const SizedBox(height: 12),
+                      const Text('パスワード（6文字以上）', style: labelStyle),
+                      const SizedBox(height: 6),
+                      CupertinoTextField(
+                        controller: _pass,
+                        obscureText: _obscure,
+                        placeholderStyle: placeholderStyle,
+                        style: fieldStyle,
+                        enabled: !_busy,
+                        autocorrect: false,
+                        suffix: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () => setState(() => _obscure = !_obscure),
+                          ),
+                          minimumSize: Size(30, 30),
+                          child: Icon(
+                            _obscure
+                                ? CupertinoIcons.eye
+                                : CupertinoIcons.eye_slash,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      if (_isSignUp) ...[
+                        const SizedBox(height: 12),
+                        const Text('表示名（任意）', style: labelStyle),
+                        const SizedBox(height: 6),
+                        CupertinoTextField(
+                          controller: _name,
+                          placeholderStyle: placeholderStyle,
+                          style: fieldStyle,
+                          enabled: !_busy,
+                          autocorrect: false,
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      CupertinoButton.filled(
+                        onPressed:
+                            _busy
+                                ? null
+                                : AppAudioService.instance.withTapSfx(
+                                  _handleEmail,
+                                ),
+                        child: Text(title),
+                      ),
+                      const SizedBox(height: 8),
+                      CupertinoButton(
+                        onPressed:
+                            _busy
+                                ? null
+                                : AppAudioService.instance.withTapSfx(
+                                  _handleGoogle,
+                                ),
+                        child: const Text('Googleで続ける'),
+                      ),
+                      const SizedBox(height: 8),
+                      CupertinoButton(
+                        onPressed:
+                            _busy
+                                ? null
+                                : AppAudioService.instance.withTapSfx(
+                                  () => setState(() => _isSignUp = !_isSignUp),
+                                ),
+                        child: Text(
+                          _isSignUp
+                              ? '既にアカウントをお持ちの方（ログインへ）'
+                              : 'アカウントをお持ちでない方（新規登録へ）',
+                        ),
+                      ),
+                      if (_busy) ...[
+                        const SizedBox(height: 16),
+                        const Center(child: CupertinoActivityIndicator()),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _busyGoogle ? null : _signInWithGoogle,
-                      icon:
-                          _busyGoogle
-                              ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.account_circle),
-                      label: const Text('Googleでログイン'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

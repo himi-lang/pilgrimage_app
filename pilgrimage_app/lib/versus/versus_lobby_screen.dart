@@ -1,10 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart'; // 使っていなければ消してOK
+import '../service/app_audio_service.dart';
+import '../widgets/app_ui.dart';
+import '../widgets/dialogs.dart';
+import '../app_routes.dart';
 import 'versus_service.dart';
 
-// ▼ 適切な方を1本だけ残す（このファイルが lib/versus/ にあるなら下、直下なら上）
-import '../widgets/app_ui.dart';
-// import 'widgets/app_ui.dart';
+const String _versusBackgroundImagePath = 'assets/image_dir/background.jpg';
 
 class VersusLobbyScreen extends StatefulWidget {
   const VersusLobbyScreen({super.key});
@@ -14,9 +16,26 @@ class VersusLobbyScreen extends StatefulWidget {
 
 class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
   final s = VersusService();
-  String difficulty = 'normal';
   final codeCtrl = TextEditingController();
-  bool busy = false; // 連打ガード
+  bool _busy = false;
+  Future<void>? _precacheFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    AppAudioService.instance.fadeOutScreenBgm(
+      onlyIfPath: AppAudioService.mainBgmPath,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _precacheFuture ??= precacheImage(
+      const AssetImage(_versusBackgroundImagePath),
+      context,
+    );
+  }
 
   @override
   void dispose() {
@@ -24,120 +43,159 @@ class _VersusLobbyScreenState extends State<VersusLobbyScreen> {
     super.dispose();
   }
 
+  void _toast(String msg) {
+    if (!mounted) return;
+    showAppMessageDialog(context, msg);
+  }
+
+  void _handleBackToVersusSelection() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    navigator.pushNamedAndRemoveUntil(
+      AppRoutes.modeSelection,
+      (route) => false,
+    );
+  }
+
+  Future<void> _quickMatch() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await s.quickJoin();
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRoutes.versusRoom(id));
+    } catch (e) {
+      _toast('クイックマッチに失敗: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _createPrivate() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await s.createRoom(isPrivate: true);
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRoutes.versusRoom(id));
+    } catch (e) {
+      _toast('部屋の作成に失敗: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _joinByCode() async {
+    if (_busy) return;
+    final raw = codeCtrl.text.trim().toUpperCase();
+    if (raw.length != 6) {
+      _toast('招待コードは6桁です');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final id = await s.joinByCode(raw);
+      if (id == null) {
+        _toast('見つかりませんでした（コード・開始済み・終了の可能性）');
+      } else {
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, AppRoutes.versusRoom(id));
+      }
+    } catch (e) {
+      _toast('参加に失敗: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: commonAppBar(context, title: '対戦ロビー'), // ← 共通ログアウトつき
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'easy', label: Text('Easy')),
-                ButtonSegment(value: 'normal', label: Text('Normal')),
-                ButtonSegment(value: 'hard', label: Text('Hard')),
-              ],
-              selected: {difficulty},
-              onSelectionChanged: (v) => setState(() => difficulty = v.first),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed:
-                  busy
-                      ? null
-                      : () async {
-                        setState(() => busy = true);
-                        final id = await s.quickJoin(difficulty: difficulty);
-                        if (!mounted) return;
-                        setState(() => busy = false);
-                        Navigator.pushReplacementNamed(
-                          context,
-                          '/versus/room/$id',
-                        );
-                      },
-              icon: const Icon(Icons.flash_on),
-              label: Text(busy ? '接続中…' : 'クイックマッチ'),
-            ),
-            const Divider(height: 32),
-            Text('プライベートマッチ', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        busy
-                            ? null
-                            : () async {
-                              setState(() => busy = true);
-                              final id = await s.createRoom(
-                                isPrivate: true,
-                                difficulty: difficulty,
-                              );
-                              if (!mounted) return;
-                              setState(() => busy = false);
-                              Navigator.pushReplacementNamed(
-                                context,
-                                '/versus/room/$id',
-                              );
-                            },
-                    icon: const Icon(Icons.lock),
-                    label: const Text('部屋を作る'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: codeCtrl,
-                    textCapitalization: TextCapitalization.characters,
-                    maxLength: 6,
-                    decoration: const InputDecoration(
-                      hintText: '招待コード6桁',
-                      counterText: '',
+    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+    );
+    const fieldStyle = TextStyle(fontSize: 16, color: Colors.black);
+    const placeholderStyle = TextStyle(
+      fontSize: 15,
+      color: CupertinoColors.systemGrey,
+    );
+
+    return CupertinoPageScaffold(
+      navigationBar: commonAppBar(
+        context,
+        title: '対戦ロビー',
+        currentMode: AppMode.versus,
+        leading: AppBackButton(onPressed: _handleBackToVersusSelection),
+      ),
+      child: Container(
+        // ★ 背景画像
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(_versusBackgroundImagePath),
+            fit: BoxFit.cover,
+          ),
+        ),
+        // 背景の上にうっすら白をかぶせて内容を載せる
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white.withValues(alpha: 0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CupertinoButton.filled(
+                onPressed:
+                    _busy
+                        ? null
+                        : AppAudioService.instance.withTapSfx(_quickMatch),
+                child: Text(_busy ? '接続中…' : 'クイックマッチ'),
+              ),
+              const Divider(height: 32),
+              Text('プライベートマッチ', style: titleStyle),
+              const SizedBox(height: 8),
+              CupertinoButton(
+                onPressed:
+                    _busy
+                        ? null
+                        : AppAudioService.instance.withTapSfx(_createPrivate),
+                color: CupertinoColors.systemGrey5,
+                child: const Text('部屋を作る'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: CupertinoTextField(
+                        controller: codeCtrl,
+                        style: fieldStyle,
+                        placeholderStyle: placeholderStyle,
+                        maxLines: 1,
+                        textCapitalization: TextCapitalization.characters,
+                        placeholder: '招待コード6桁',
+                        autocorrect: false,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed:
-                      busy
-                          ? null
-                          : () async {
-                            final code = codeCtrl.text.trim().toUpperCase();
-                            if (code.length != 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('6桁のコードを入力してください'),
-                                ),
-                              );
-                              return;
-                            }
-                            setState(() => busy = true);
-                            final id = await s.joinByCode(code);
-                            if (!mounted) return;
-                            setState(() => busy = false);
-                            if (id == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('見つかりませんでした')),
-                              );
-                            } else {
-                              Navigator.pushReplacementNamed(
-                                context,
-                                '/versus/room/$id',
-                              );
-                            }
-                          },
-                  child: const Text('参加'),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 8),
+                  CupertinoButton.filled(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    minimumSize: const Size(44, 44),
+                    onPressed:
+                        _busy
+                            ? null
+                            : AppAudioService.instance.withTapSfx(_joinByCode),
+                    child: const Text('参加'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

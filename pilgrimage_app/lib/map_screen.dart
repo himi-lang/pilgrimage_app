@@ -1,41 +1,43 @@
-// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）+ ピン選択で画像プレビュー
+// map_screen.dart — 候補だけピン表示 + Enter後は固定 + 復元 + 現在地スタート（最優先）
+// ＋ピン選択で画像プレビュー ＋ 画像検索モードから来たときはその作品だけピン表示
+
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'app_route_observer.dart';
 import 'firebase_service.dart';
 import './models/location.dart';
+import 'service/app_audio_service.dart';
+import 'service/commons_image_service.dart';
+import 'service/location_search_service.dart';
 import 'widgets/app_ui.dart';
+import 'widgets/dialogs.dart';
 
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  /// 画像検索モードから遷移してきたときに渡される作品タイトル
+  final String? initialWorkTitle;
+
+  const MapScreen({super.key, this.initialWorkTitle});
+
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
+class _MapScreenState extends State<MapScreen>
+    with WidgetsBindingObserver, RouteAware {
   // --- 検索 ---
   final TextEditingController _searchCtrl = TextEditingController();
   bool _showCandidates = false;
+  Timer? _searchDebounce;
 
-  // 画像の下に説明文を（最大3行で）表示。空なら非表示。
-  Widget _buildSpotDescription(LocationData d) {
-    final desc = (d.description ?? '').trim();
-    if (desc.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Text(
-        desc,
-        style: const TextStyle(fontSize: 13.5, height: 1.4),
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
+  StreamSubscription? _debugSub;
 
   // Enterでその時点の候補集合を固定
   bool _pinsLocked = false;
@@ -49,7 +51,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   LocationData? _selected;
 
   // 現在地
-  LatLng? _userLatLng;
   bool _triedStartFromUser = false;
 
   // 中断/再開（復元用）
@@ -62,7 +63,24 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   // Firestore
   late final Stream<List<LocationData>> _locationsStream;
+  final LocationSearchService _locationSearchService =
+      const LocationSearchService();
   List<LocationData> _all = [];
+  final CommonsImageService _commonsImageService = CommonsImageService();
+  final Map<String, Future<List<String>>> _imageCandidatesCache = {};
+  final Map<String, String> _resolvedCommonsThumbCache = {};
+  final Set<String> _commonsResolveRequested = {};
+
+  // after-buildを1回だけ走らせる
+  bool _onceAfterBuildRan = false;
+
+  // 画像検索モードから来た作品の pin 固定を適用済みかどうか
+  bool _initialWorkApplied = false;
+  PageRoute<dynamic>? _route;
+
+  bool get _hasInitialWorkTitle =>
+      widget.initialWorkTitle != null &&
+      widget.initialWorkTitle!.trim().isNotEmpty;
 
   // --- 端末保存キー ---
   static const _kLat = 'resume_lat';
@@ -76,17 +94,68 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    AppAudioService.instance.playMainBgm();
     WidgetsBinding.instance.addObserver(this);
     _locationsStream = FirebaseService().locationsStreamAllWorks();
-    _loadResumeState(); // 先に読み出し（適用はMap作成後）
+
+    final hasInitialWork = _hasInitialWorkTitle;
+
+    if (hasInitialWork) {
+      // 画像検索モードから来たとき：検索窓だけ先にセット
+      _searchCtrl.text = widget.initialWorkTitle!;
+      _showCandidates = false;
+      _pinsLocked = false;
+      _lockedPinIds.clear();
+    } else {
+      // 通常起動：前回状態を復元
+      _loadResumeState();
+    }
+
+    _debugSub = FirebaseFirestore.instance
+        .collection('聖地情報')
+        .limit(1)
+        .snapshots()
+        .listen(
+          (s) => debugPrint(
+            '聖地情報RT: size=${s.size}, fromCache=${s.metadata.isFromCache}',
+          ),
+          onError: (e) => debugPrint('聖地情報RT error: $e'),
+        );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && _route != route) {
+      if (_route != null) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
   }
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _saveResumeState();
     _searchCtrl.dispose();
+    _debugSub?.cancel();
+    _searchDebounce?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didPush() {
+    AppAudioService.instance.playMainBgm();
+  }
+
+  @override
+  void didPopNext() {
+    AppAudioService.instance.playMainBgm();
   }
 
   @override
@@ -107,38 +176,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   static const double _hitZoom = 16.0;
 
-  // --- 文字正規化 + 検索 ---
-  String _normalize(String s) {
-    final runes = s
-        .trim()
-        .toLowerCase()
-        .runes
-        .map((r) {
-          if (r >= 0xFF01 && r <= 0xFF5E) return r - 0xFEE0; // 全角→半角
-          if (r >= 0x30A1 && r <= 0x30F6) return r - 0x60; // ｶﾅ→ひらがな
-          return r;
-        })
-        .where((r) {
-          const drops = [0x0020, 0x3000, 0x3001, 0x3002];
-          return !drops.contains(r);
-        });
-    return String.fromCharCodes(runes);
-  }
-
-  bool _match(LocationData d, String q) {
-    if (q.isEmpty) return true;
-    final nq = _normalize(q);
-    bool contains(String x) => _normalize(x).contains(nq);
-    return contains(d.name) ||
-        contains(d.address) ||
-        contains(d.description) ||
-        contains(d.workTitle);
-  }
-
   List<LocationData> _filter(List<LocationData> list, String q) {
-    final qs = q.trim();
-    if (qs.isEmpty) return list;
-    return list.where((d) => _match(d, qs)).toList();
+    return _locationSearchService.filterLocations(list, q);
   }
 
   // --- 地図操作 ---
@@ -155,6 +194,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   Future<void> _fitToAllIfNeeded() async {
     if (_initialFitDone || !_mapReady || _all.isEmpty) return;
+
     final c = await _controller();
     _initialFitDone = true;
 
@@ -199,7 +239,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   // === 現在地 ===
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    showAppMessageDialog(context, msg);
   }
 
   Future<LatLng?> _getUserLatLng() async {
@@ -244,7 +284,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (!mounted) return;
 
     if (loc != null) {
-      _userLatLng = loc;
       _initialFitDone = true;
       await _goToLatLng(loc, zoom: 15);
       setState(() {}); // 青点の見た目更新
@@ -376,7 +415,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _selected = d;
       _showCandidates = false;
       _pinsLocked = true;
-      _lockedPinIds = {_selected!.id}; // タップ時はその1件に固定
+      _lockedPinIds = {_selected!.id};
     });
     FocusScope.of(context).unfocus();
 
@@ -391,7 +430,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   // =========================
-  // ピン選択時の画像プレビュー（追加）
+  // ピン選択時の画像プレビュー
   // =========================
   bool _isValidImageUrl(String? url) {
     if (url == null) return false;
@@ -399,6 +438,87 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (u.isEmpty) return false;
     final uri = Uri.tryParse(u);
     return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
+  List<String> _imageUrlCandidates(String raw) {
+    final out = <String>[];
+    final seen = <String>{};
+
+    void add(String? value) {
+      final v = (value ?? '').trim();
+      if (v.isEmpty) return;
+      if (seen.add(v)) out.add(v);
+    }
+
+    add(raw);
+    final base = raw.trim();
+    final uri = Uri.tryParse(base);
+
+    if (uri != null && uri.scheme == 'http') {
+      add(base.replaceFirst('http://', 'https://'));
+    }
+
+    if (uri != null && uri.host.contains('drive.google.com')) {
+      String? id;
+      final seg = uri.pathSegments;
+      final fileIdx = seg.indexOf('file');
+      if (fileIdx >= 0 && seg.length > fileIdx + 2 && seg[fileIdx + 1] == 'd') {
+        id = seg[fileIdx + 2];
+      }
+      id ??= uri.queryParameters['id'];
+      if (id != null && id.isNotEmpty) {
+        add('https://drive.google.com/uc?export=view&id=$id');
+      }
+    }
+
+    return out.where(_isValidImageUrl).toList(growable: false);
+  }
+
+  Future<List<String>> _resolveImageCandidates(String raw) {
+    final direct = _imageUrlCandidates(raw);
+    final key = raw.trim();
+    final all = <String>[];
+    final seen = <String>{};
+    void addUrl(String? u) {
+      if (u == null) return;
+      if (_isValidImageUrl(u) && seen.add(u)) all.add(u);
+    }
+
+    final quickCommons = _commonsImageService.quickThumbUrl(raw, width: 960);
+    addUrl(quickCommons);
+
+    for (final u in direct) {
+      addUrl(u);
+    }
+    addUrl(_resolvedCommonsThumbCache[key]);
+
+    // UIを待たせないため、確定URLの解決は裏で実行して次回以降に効かせる
+    if (quickCommons != null &&
+        !_resolvedCommonsThumbCache.containsKey(key) &&
+        _commonsResolveRequested.add(key)) {
+      unawaited(
+        _commonsImageService
+            .resolveThumbUrl(raw, width: 960)
+            .then((resolved) {
+              if (!mounted || resolved == null || resolved.isEmpty) return;
+              if (_resolvedCommonsThumbCache[key] == resolved) return;
+              _resolvedCommonsThumbCache[key] = resolved;
+              _imageCandidatesCache.remove(key);
+              if (mounted) setState(() {});
+            })
+            .catchError((_) {}),
+      );
+    }
+
+    return Future.value(all);
+  }
+
+  Future<List<String>> _resolveImageCandidatesCached(String raw) {
+    final key = raw.trim();
+    return _imageCandidatesCache.putIfAbsent(
+      key,
+      () => _resolveImageCandidates(key),
+    );
   }
 
   void _openImageViewer(String url, String title) {
@@ -415,6 +535,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     child: Image.network(
                       url,
                       fit: BoxFit.contain,
+                      filterQuality: FilterQuality.low,
+                      cacheWidth: 960,
+                      headers: const {'User-Agent': 'Mozilla/5.0'},
                       errorBuilder:
                           (_, __, ___) => const Center(
                             child: Icon(Icons.broken_image_outlined, size: 48),
@@ -426,7 +549,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   right: 4,
                   top: 4,
                   child: IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: AppAudioService.instance.withTapSfx(
+                      () => Navigator.of(context).pop(),
+                    ),
                     icon: const Icon(Icons.close),
                     tooltip: '閉じる',
                   ),
@@ -438,42 +563,54 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildSpotImage(LocationData d) {
-    final url = d.image.trim();
-    if (!_isValidImageUrl(url)) return const SizedBox.shrink();
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: () => _openImageViewer(url, d.name),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(color: Colors.black12),
-                  Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      );
-                    },
-                    errorBuilder: (context, error, stack) {
-                      return const Center(
-                        child: Icon(Icons.broken_image_outlined, size: 48),
-                      );
-                    },
+    final raw = d.image.trim();
+    if (raw.isEmpty) return const SizedBox.shrink();
+    return FutureBuilder<List<String>>(
+      future: _resolveImageCandidatesCached(raw),
+      builder: (context, snap) {
+        final urls = snap.data ?? const <String>[];
+        return Column(
+          children: [
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap:
+                  urls.isEmpty
+                      ? null
+                      : () => _openImageViewer(urls.first, d.name),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Container(color: Colors.black12),
+                      if (!snap.hasData)
+                        const Center(child: CupertinoActivityIndicator())
+                      else
+                        _SpotImageWithFallback(urls: urls),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSpotDescription(LocationData d) {
+    final desc = d.description.trim();
+    if (desc.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        desc,
+        style: const TextStyle(fontSize: 13.5, height: 1.4),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 
@@ -516,12 +653,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         IconButton(
-                          onPressed:
-                              () => setState(() {
-                                _selected = null;
-                                // 固定は維持（必要なら解除の1行を有効化）
-                                // _pinsLocked=false; _lockedPinIds.clear();
-                              }),
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () => setState(() {
+                              _selected = null;
+                            }),
+                          ),
                           icon: const Icon(Icons.close),
                           tooltip: '閉じる',
                         ),
@@ -541,29 +677,28 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     ],
-
-                    // ★画像プレビューをここに差し込む（UI崩さず）
                     _buildSpotImage(d),
-
-                    //画像の下に説明文を追加
                     _buildSpotDescription(d),
-
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () => _openRoute(d),
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () => _openRoute(d),
+                          ),
                           icon: const Icon(Icons.directions),
                           label: const Text('経路'),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(
-                          onPressed: () async {
-                            await _goToLatLng(
-                              LatLng(d.latitude, d.longitude),
-                              zoom: _hitZoom,
-                            );
-                          },
+                          onPressed: AppAudioService.instance.withTapSfx(
+                            () async {
+                              await _goToLatLng(
+                                LatLng(d.latitude, d.longitude),
+                                zoom: _hitZoom,
+                              );
+                            },
+                          ),
                           icon: const Icon(Icons.center_focus_strong),
                           label: const Text('中心へ'),
                         ),
@@ -587,64 +722,55 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('マップアプリを開けませんでした')));
+      _showSnack('マップアプリを開けませんでした');
     }
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      titleSpacing: 0,
-      title: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: TextField(
+  // --- AppBar（検索ボックス付き） ---
+  ObstructingPreferredSizeWidget _buildAppBar() {
+    return CupertinoNavigationBar(
+      automaticallyImplyLeading: false,
+      leading: const AppBackButton(),
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      automaticBackgroundVisibility: false,
+      middle: SizedBox(
+        width: double.infinity,
+        child: CupertinoSearchTextField(
+          backgroundColor: CupertinoColors.white,
           controller: _searchCtrl,
-          decoration: InputDecoration(
-            hintText: '作品名・スポット名・住所',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon:
-                _searchCtrl.text.isEmpty
-                    ? null
-                    : IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        setState(() {
-                          _showCandidates = false;
-                          _pinsLocked = false;
-                          _lockedPinIds.clear();
-                        });
-                      },
-                    ),
-            filled: true,
-            isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-          onChanged:
-              (v) => setState(() {
-                _showCandidates = v.trim().isNotEmpty;
-                _pinsLocked = false; // 入力し直したら固定解除
-              }),
-          onSubmitted: (v) => _confirmSearch(v),
-          textInputAction: TextInputAction.search,
+          placeholder: '作品名・スポット名・住所',
+          autocorrect: false,
+          onChanged: (v) {
+            _searchDebounce?.cancel();
+            _showCandidates = v.trim().isNotEmpty;
+            _pinsLocked = false;
+            _searchDebounce = Timer(const Duration(milliseconds: 180), () {
+              if (mounted) setState(() {});
+            });
+          },
+          onSubmitted: _confirmSearch,
+          onSuffixTap: () {
+            _searchCtrl.clear();
+            setState(() {
+              _showCandidates = false;
+              _pinsLocked = false;
+              _lockedPinIds.clear();
+            });
+          },
         ),
       ),
-      actions: const [LogoutButton()],
+      trailing: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [ModeSwitchButton(currentMode: AppMode.map), AppMenuButton()],
+      ),
     );
   }
 
   Future<void> _confirmSearch(String v) async {
-    // 現在の候補（＝画面に出ている集合）を確定・固定
     final candidates = _filter(_all, v).take(20).toList();
     if (candidates.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('該当がありません')));
+      _showSnack('該当がありません');
       setState(() {
         _pinsLocked = false;
         _lockedPinIds.clear();
@@ -656,7 +782,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final hit = candidates.first;
     setState(() {
       _pinsLocked = true;
-      _lockedPinIds = candidates.map((d) => d.id).toSet(); // ← この集合を保持
+      _lockedPinIds = candidates.map((d) => d.id).toSet();
       _selected = hit;
       _showCandidates = false;
     });
@@ -671,166 +797,223 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  Widget _buildZoomButtons() {
-    return SafeArea(
-      child: Align(
-        alignment: Alignment.bottomRight,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 12, bottom: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingActionButton.small(
-                heroTag: 'zoom_in',
-                onPressed: () async {
-                  final c = await _controller();
-                  final current = await c.getZoomLevel();
-                  await c.animateCamera(CameraUpdate.zoomTo(current + 1));
-                },
-                child: const Icon(Icons.add),
-              ),
-              const SizedBox(height: 8),
-              FloatingActionButton.small(
-                heroTag: 'zoom_out',
-                onPressed: () async {
-                  final c = await _controller();
-                  final current = await c.getZoomLevel();
-                  await c.animateCamera(CameraUpdate.zoomTo(current - 1));
-                },
-                child: const Icon(Icons.remove),
-              ),
-            ],
-          ),
+  // ピンの取りこぼしを防ぐため、Google Map標準のPOI(店舗など)を非表示にする。
+  // 自アプリの聖地ピンだけが残る。
+  static const String _mapStyleHidePoi = '''
+[
+  {"featureType": "poi", "stylers": [{"visibility": "off"}]},
+  {"featureType": "transit", "elementType": "labels.icon", "stylers": [{"visibility": "off"}]}
+]
+''';
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      backgroundColor: const Color(0xFF101214),
+      navigationBar: _buildAppBar(),
+      child: Material(
+        color: Colors.transparent,
+        child: StreamBuilder<List<LocationData>>(
+          stream: _locationsStream,
+          builder: (context, snap) {
+            if (snap.hasError) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showSnack('データ取得エラー: ${snap.error}');
+              });
+            }
+            final isFirstLoad =
+                snap.connectionState == ConnectionState.waiting && _all.isEmpty;
+            final isUpdating =
+                snap.connectionState == ConnectionState.waiting &&
+                _all.isNotEmpty;
+
+            if (isFirstLoad) {
+              return Container(
+                color: const Color(0xFF101214),
+                alignment: Alignment.center,
+                child: const CircularProgressIndicator(),
+              );
+            }
+
+            final data = snap.data ?? _all;
+            _all = data;
+
+            // 今の入力に対する候補（パネルと同じ20件）
+            final candidates =
+                _filter(_all, _searchCtrl.text).take(20).toList();
+
+            // 表示するピン集合を決定
+            final List<LocationData> visible =
+                _pinsLocked
+                    ? _all.where((d) => _lockedPinIds.contains(d.id)).toList()
+                    : (_showCandidates && _searchCtrl.text.trim().isNotEmpty)
+                    ? candidates
+                    : _all;
+
+            // 近接ピンが同一セルに吸収されて消える現象を避けるため、間引きは行わず全ピンを表示する。
+            final markers =
+                visible
+                    .map(
+                      (d) => Marker(
+                        markerId: MarkerId(d.id),
+                        position: LatLng(d.latitude, d.longitude),
+                        infoWindow: InfoWindow(
+                          title: d.name,
+                          snippet: [
+                            d.workTitle,
+                            d.address,
+                          ].where((e) => e.isNotEmpty).join(' / '),
+                          onTap: () => setState(() => _selected = d),
+                        ),
+                        onTap: () => setState(() => _selected = d),
+                      ),
+                    )
+                    .toSet();
+
+            // 1回だけ：現在地→全体→復元 or 画像検索モード専用の初期表示
+            if (!_onceAfterBuildRan) {
+              _onceAfterBuildRan = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final hasInitialWork = _hasInitialWorkTitle;
+
+                if (hasInitialWork && !_initialWorkApplied) {
+                  _initialWorkApplied = true;
+                  await _confirmSearch(widget.initialWorkTitle!);
+                } else {
+                  if (_mapReady) {
+                    await _applyResumeOrStart();
+                  }
+                  if (!_didRestoreSelected && _resumeSelectedId != null) {
+                    final d = _findById(_resumeSelectedId!);
+                    _didRestoreSelected = true;
+                    if (d != null) {
+                      setState(() => _selected = d);
+                      try {
+                        final c = await _controller();
+                        c.showMarkerInfoWindow(MarkerId(d.id));
+                      } catch (_) {}
+                    }
+                  }
+                }
+              });
+            }
+
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: Container(color: const Color(0xFF101214)),
+                ),
+                GoogleMap(
+                  initialCameraPosition: _initialCamera,
+                  style: _mapStyleHidePoi,
+                  onMapCreated: (c) async {
+                    if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
+                    _mapReady = true;
+                    await c.moveCamera(
+                      CameraUpdate.newCameraPosition(_initialCamera),
+                    );
+                    await Future.delayed(const Duration(milliseconds: 120));
+                    // 画像検索モードから来たときは、現在地へ寄せず
+                    // _confirmSearch(initialWorkTitle) のフォーカスを優先する。
+                    if (!_hasInitialWorkTitle) {
+                      // マップ作成完了後にも初期処理を走らせる。
+                      // after-build が先に動いて _mapReady=false だった場合の取りこぼしを防ぐ。
+                      await _applyResumeOrStart();
+                    }
+                  },
+                  cameraTargetBounds: CameraTargetBounds.unbounded,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  mapToolbarEnabled: false,
+                  zoomControlsEnabled: false,
+                  zoomGesturesEnabled: true,
+                  tiltGesturesEnabled: true,
+                  rotateGesturesEnabled: true,
+                  markers: markers,
+                  onTap: (_) {
+                    if (_showCandidates) {
+                      setState(() => _showCandidates = false);
+                    }
+                  },
+                  onCameraMove: (pos) => _lastCamera = pos,
+                ),
+
+                // 候補パネルは candidates を表示
+                _buildCandidatePanel(candidates),
+                const VisitedRecordShortcut(),
+                _buildSelectedCard(),
+
+                if (isUpdating)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        color: const Color(0x99000000),
+                        alignment: Alignment.topCenter,
+                        child: const Padding(
+                          padding: EdgeInsets.only(top: 8.0),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
+}
 
-  // --- ビルド ---
+class _SpotImageWithFallback extends StatefulWidget {
+  final List<String> urls;
+  const _SpotImageWithFallback({required this.urls});
+
+  @override
+  State<_SpotImageWithFallback> createState() => _SpotImageWithFallbackState();
+}
+
+class _SpotImageWithFallbackState extends State<_SpotImageWithFallback> {
+  int _index = 0;
+
+  @override
+  void didUpdateWidget(covariant _SpotImageWithFallback oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.urls.join('|') != oldWidget.urls.join('|')) {
+      _index = 0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF101214),
-      appBar: _buildAppBar(),
-      body: StreamBuilder<List<LocationData>>(
-        stream: _locationsStream,
-        builder: (context, snap) {
-          final isFirstLoad =
-              snap.connectionState == ConnectionState.waiting && _all.isEmpty;
-          final isUpdating =
-              snap.connectionState == ConnectionState.waiting &&
-              _all.isNotEmpty;
+    if (widget.urls.isEmpty) {
+      return const Center(child: Icon(Icons.broken_image_outlined, size: 48));
+    }
 
-          if (isFirstLoad) {
-            return Container(
-              color: const Color(0xFF101214),
-              alignment: Alignment.center,
-              child: const CircularProgressIndicator(),
-            );
-          }
-
-          final data = snap.data ?? _all;
-          _all = data;
-
-          // 今の入力に対する候補（パネルと同じ20件）
-          final candidates = _filter(_all, _searchCtrl.text).take(20).toList();
-
-          // 表示するピン集合を決定
-          final List<LocationData> visible =
-              _pinsLocked
-                  ? _all.where((d) => _lockedPinIds.contains(d.id)).toList()
-                  : (_showCandidates && _searchCtrl.text.trim().isNotEmpty)
-                  ? candidates
-                  : _all;
-
-          final markers =
-              visible
-                  .map(
-                    (d) => Marker(
-                      markerId: MarkerId(d.id),
-                      position: LatLng(d.latitude, d.longitude),
-                      infoWindow: InfoWindow(
-                        title: d.name,
-                        snippet: [
-                          d.workTitle,
-                          d.address,
-                        ].where((e) => e.isNotEmpty).join(' / '),
-                        onTap: () => setState(() => _selected = d),
-                      ),
-                      onTap: () => setState(() => _selected = d),
-                    ),
-                  )
-                  .toSet();
-
-          // 1) 初回：現在地→全体→復元 の順で適用
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (_mapReady) {
-              await _applyResumeOrStart();
-            }
-            // 2) 復元で選択中スポットがあれば反映
-            if (!_didRestoreSelected && _resumeSelectedId != null) {
-              final d = _findById(_resumeSelectedId!);
-              _didRestoreSelected = true;
-              if (d != null) {
-                setState(() => _selected = d);
-                try {
-                  final c = await _controller();
-                  c.showMarkerInfoWindow(MarkerId(d.id));
-                } catch (_) {}
-              }
+    final url = widget.urls[_index];
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.low,
+      cacheWidth: 720,
+      headers: const {'User-Agent': 'Mozilla/5.0'},
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      },
+      errorBuilder: (context, error, stack) {
+        if (_index < widget.urls.length - 1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _index++;
+              });
             }
           });
-
-          return Stack(
-            children: [
-              Positioned.fill(child: Container(color: const Color(0xFF101214))),
-              GoogleMap(
-                initialCameraPosition: _initialCamera,
-                onMapCreated: (c) async {
-                  if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
-                  _mapReady = true;
-                  await c.moveCamera(
-                    CameraUpdate.newCameraPosition(_initialCamera),
-                  );
-                  await Future.delayed(const Duration(milliseconds: 120));
-                  await _applyResumeOrStart();
-                },
-                cameraTargetBounds: CameraTargetBounds.unbounded,
-                myLocationEnabled: true, // 青点オン
-                myLocationButtonEnabled: true, // 右上ボタンもオン
-                zoomControlsEnabled: false,
-                zoomGesturesEnabled: true,
-                tiltGesturesEnabled: true,
-                rotateGesturesEnabled: true,
-                markers: markers,
-                onTap: (_) {
-                  if (_showCandidates) setState(() => _showCandidates = false);
-                },
-                onCameraMove: (pos) => _lastCamera = pos,
-              ),
-
-              // 候補パネルは candidates を表示
-              _buildCandidatePanel(candidates),
-              _buildZoomButtons(),
-              _buildSelectedCard(),
-
-              if (isUpdating)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      color: const Color(0x99000000),
-                      alignment: Alignment.topCenter,
-                      child: const Padding(
-                        padding: EdgeInsets.only(top: 8.0),
-                        child: LinearProgressIndicator(minHeight: 2),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
+          return const Center(child: CupertinoActivityIndicator());
+        }
+        return const Center(child: Icon(Icons.broken_image_outlined, size: 48));
+      },
     );
   }
 }
